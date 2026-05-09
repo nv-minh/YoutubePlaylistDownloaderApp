@@ -213,15 +213,15 @@ $start.addEventListener('click', async () => {
     // Download selected videos
     await invoke('start_download', {
       settings: {
-        playlistUrl: url,
-        cookieFile: cookieFile || '',
-        outputDir,
+        playlist_url: url,
+        cookie_file: cookieFile || '',
+        output_dir: outputDir,
         quality: $quality.value,
         format: $format.value,
         proxy: $proxy.value || null,
-        commentsOnly: $commentsOnly.checked,
-        autoTag: $autoTag.checked,
-        selectedIndices,
+        comments_only: $commentsOnly.checked,
+        auto_tag: $autoTag.checked,
+        selected_indices: selectedIndices,
       },
     });
   } catch (e) {

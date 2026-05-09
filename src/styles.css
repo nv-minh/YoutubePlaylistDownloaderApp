@@ -100,6 +100,7 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { border-color: var(--primary); }
 input::placeholder, textarea::placeholder { color: var(--ink-muted); }
 textarea {
+  width: 100%;
   border-radius: var(--radius-sm);
   resize: vertical;
   font-family: 'SF Mono', Menlo, Consolas, monospace;

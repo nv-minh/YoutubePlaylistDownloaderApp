@@ -18,13 +18,16 @@ const translations = {
     videoQuality: "Chất lượng video", outputFormat: "Định dạng đầu ra",
     proxy: "Proxy (tùy chọn)",
     autoTag: "Tự động gắn tag (artist, title, genre)",
-    commentsOnly: "Chỉ tải bình luận (bỏ qua video)",
+    commentsOnly: "Tải bình luận (comments)",
     startDownload: "Bắt đầu tải", stop: "Dừng",
-    openFolder: "Mở thư mục",
-    queueEmpty: "Dán link playlist và bấm Bắt đầu",
+    openFolder: "Mở thư mục", clear: "Xóa",
+    queueEmpty: "Dán link playlist/video và bấm Bắt đầu",
     selectAll: "Chọn tất cả", selected: "đã chọn",
     noCookieAlert: "Vui lòng dán cookie cho nội dung riêng tư.",
-    fetching: "Đang lấy thông tin playlist...",
+    fetching: "Đang lấy thông tin...",
+    redownload: "Tải lại lỗi",
+    tabPlaylist: "Playlist", tabVideo: "1 Video",
+    videoUrl: "Link Video", videoUrlPlaceholder: "Dán link YouTube video...",
   },
   en: {
     appTitle: "YouTube Playlist Downloader",
@@ -40,17 +43,19 @@ const translations = {
     videoQuality: "Video Quality", outputFormat: "Output Format",
     proxy: "Proxy (optional)",
     autoTag: "Auto-tag (artist, title, genre)",
-    commentsOnly: "Comments only (skip video)",
+    commentsOnly: "Include comments",
     startDownload: "Start Download", stop: "Stop",
-    openFolder: "Open Folder",
-    queueEmpty: "Paste a playlist URL and click Start",
+    openFolder: "Open Folder", clear: "Clear",
+    queueEmpty: "Paste a playlist/video URL and click Start",
     selectAll: "Select all", selected: "selected",
     noCookieAlert: "Please paste cookies for private content.",
-    fetching: "Fetching playlist...",
+    fetching: "Fetching info...",
+    redownload: "Redownload failed",
+    tabPlaylist: "Playlist", tabVideo: "1 Video",
+    videoUrl: "Video URL", videoUrlPlaceholder: "Paste YouTube video URL...",
   },
 };
 
-// Fallback: any key not found falls back to English, then to the key itself
 function t(key) {
   const lang = document.getElementById('lang').value;
   return (translations[lang] && translations[lang][key])
@@ -70,6 +75,7 @@ function applyTranslations() {
 
 // ── Elements ──────────────────────────────────────────────────────────
 const $url = document.getElementById('url');
+const $urlVideo = document.getElementById('url-video');
 const $cookieText = document.getElementById('cookie-text');
 const $output = document.getElementById('output');
 const $quality = document.getElementById('quality');
@@ -89,19 +95,33 @@ const $lang = document.getElementById('lang');
 
 let outputDir = '';
 let accessType = 'public';
-let playlistVideos = []; // store for checkbox tracking
+let downloadMode = 'playlist'; // 'playlist' or 'video'
+let playlistVideos = [];
+let failedIndices = [];
 
 // ── Language switch ───────────────────────────────────────────────────
 $lang.addEventListener('change', () => applyTranslations());
 
-// ── Tab switching ─────────────────────────────────────────────────────
+// ── Access tab switching ──────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const group = tab.closest('.tabs');
+    group.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    accessType = tab.dataset.tab;
-    document.getElementById(`content-${accessType}`).classList.add('active');
+    // Access type tabs
+    if (tab.dataset.tab) {
+      accessType = tab.dataset.tab;
+      document.querySelectorAll('.tab-content').forEach(c => {
+        if (c.id.startsWith('content-')) c.classList.remove('active');
+      });
+      document.getElementById(`content-${accessType}`).classList.add('active');
+    }
+    // Download mode tabs
+    if (tab.dataset.mode) {
+      downloadMode = tab.dataset.mode;
+      document.querySelectorAll('.mode-content').forEach(c => c.classList.remove('active'));
+      document.getElementById(`mode-${downloadMode}`).classList.add('active');
+    }
   });
 });
 
@@ -160,10 +180,27 @@ function updateCardStyles() {
   if (countEl) countEl.textContent = `${checked}/${total} ${t('selected')}`;
 }
 
+// ── Clear ─────────────────────────────────────────────────────────────
+document.getElementById('btn-clear').addEventListener('click', () => {
+  playlistVideos = [];
+  failedIndices = [];
+  $url.value = '';
+  $urlVideo.value = '';
+  $log.innerHTML = '';
+  $progressFill.style.width = '0%';
+  $stats.textContent = '';
+  $start.disabled = false;
+  $stop.disabled = true;
+  $folder.disabled = true;
+  const $redownload = document.getElementById('btn-redownload');
+  if ($redownload) $redownload.style.display = 'none';
+  $queue.innerHTML = `<div class="queue-empty" data-i18n="queueEmpty">${t('queueEmpty')}</div>`;
+});
+
 // ── Start download ────────────────────────────────────────────────────
 $start.addEventListener('click', async () => {
-  const url = $url.value.trim();
-  if (!url) { $url.focus(); return; }
+  const url = (downloadMode === 'video' ? $urlVideo.value.trim() : $url.value.trim());
+  if (!url) { (downloadMode === 'video' ? $urlVideo : $url).focus(); return; }
 
   const cookieFile = await getCookieFile();
   if (cookieFile === null) return;
@@ -175,7 +212,39 @@ $start.addEventListener('click', async () => {
     $output.value = selected;
   }
 
-  // Get selected video indices
+  // Single video mode - download directly
+  if (downloadMode === 'video') {
+    $start.disabled = true;
+    $stop.disabled = false;
+    $folder.disabled = true;
+    $log.innerHTML = '';
+    $progressFill.style.width = '0%';
+    $stats.textContent = '';
+    $queue.innerHTML = `<div class="queue-empty">${t('fetching')}</div>`;
+
+    try {
+      await invoke('start_download', {
+        settings: {
+          playlist_url: url,
+          cookie_file: cookieFile || '',
+          output_dir: outputDir,
+          quality: $quality.value,
+          format: $format.value,
+          proxy: $proxy.value || null,
+          include_comments: $commentsOnly.checked,
+          auto_tag: $autoTag.checked,
+          selected_indices: [],
+        },
+      });
+    } catch (e) {
+      appendLog(`Error: ${e}`);
+      $start.disabled = false;
+      $stop.disabled = true;
+    }
+    return;
+  }
+
+  // Playlist mode
   const selectedIndices = [];
   document.querySelectorAll('.video-check:checked').forEach(cb => {
     selectedIndices.push(parseInt(cb.dataset.index));
@@ -192,6 +261,10 @@ $start.addEventListener('click', async () => {
   $log.innerHTML = '';
   $progressFill.style.width = '0%';
   $stats.textContent = '';
+  failedIndices = [];
+
+  const $redownload = document.getElementById('btn-redownload');
+  if ($redownload) $redownload.style.display = 'none';
 
   if (playlistVideos.length === 0) {
     $queue.innerHTML = `<div class="queue-empty">${t('fetching')}</div>`;
@@ -207,10 +280,9 @@ $start.addEventListener('click', async () => {
       $log.innerHTML = '';
       appendLog(`${result.title} (${result.videos.length} videos)`);
       $start.disabled = false;
-      return; // Let user select videos, then click Start again
+      return;
     }
 
-    // Download selected videos
     await invoke('start_download', {
       settings: {
         playlist_url: url,
@@ -219,7 +291,7 @@ $start.addEventListener('click', async () => {
         quality: $quality.value,
         format: $format.value,
         proxy: $proxy.value || null,
-        comments_only: $commentsOnly.checked,
+        include_comments: $commentsOnly.checked,
         auto_tag: $autoTag.checked,
         selected_indices: selectedIndices,
       },
@@ -241,6 +313,50 @@ $stop.addEventListener('click', () => {
 // ── Open folder ───────────────────────────────────────────────────────
 $folder.addEventListener('click', () => {
   if (outputDir) invoke('open_folder', { path: outputDir });
+});
+
+// ── Redownload failed ─────────────────────────────────────────────────
+document.getElementById('btn-redownload').addEventListener('click', async () => {
+  if (failedIndices.length === 0) return;
+  const cookieFile = await getCookieFile();
+  if (cookieFile === null) return;
+
+  const $redownload = document.getElementById('btn-redownload');
+  $redownload.style.display = 'none';
+
+  $start.disabled = true;
+  $stop.disabled = false;
+  $folder.disabled = true;
+  $log.innerHTML = '';
+  $progressFill.style.width = '0%';
+
+  failedIndices.forEach(i => {
+    const el = document.getElementById(`status-${i + 1}`);
+    if (el) { el.textContent = 'Pending'; el.className = 'status pending'; }
+  });
+
+  const indices = [...failedIndices];
+  failedIndices = [];
+
+  try {
+    await invoke('start_download', {
+      settings: {
+        playlist_url: $url.value.trim(),
+        cookie_file: cookieFile || '',
+        output_dir: outputDir,
+        quality: $quality.value,
+        format: $format.value,
+        proxy: $proxy.value || null,
+        include_comments: $commentsOnly.checked,
+        auto_tag: $autoTag.checked,
+        selected_indices: indices,
+      },
+    });
+  } catch (e) {
+    appendLog(`Error: ${e}`);
+    $start.disabled = false;
+    $stop.disabled = true;
+  }
 });
 
 // ── Render queue as cards with checkboxes ─────────────────────────────
@@ -274,12 +390,20 @@ function renderQueue(videos) {
 
   $queue.innerHTML = header + cards;
 
-  // Bind events
   document.getElementById('select-all').addEventListener('change', (e) => {
     toggleAllVideos(e.target.checked);
   });
   document.querySelectorAll('.video-check').forEach(cb => {
     cb.addEventListener('change', updateCardStyles);
+  });
+  // Click on card row to toggle checkbox
+  document.querySelectorAll('.video-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'A') return;
+      const cb = card.querySelector('.video-check');
+      cb.checked = !cb.checked;
+      updateCardStyles();
+    });
   });
 }
 
@@ -298,6 +422,12 @@ listen('download-status', (event) => {
   const [idx, status] = event.payload;
   const el = document.getElementById(`status-${idx}`);
   if (el) { el.textContent = status; el.className = `status ${status}`; }
+  const videoIdx = idx - 1;
+  if (['Failed', 'Members only', 'Unavailable', 'Cookie expired'].includes(status)) {
+    if (!failedIndices.includes(videoIdx)) failedIndices.push(videoIdx);
+  } else if (status === 'done') {
+    failedIndices = failedIndices.filter(i => i !== videoIdx);
+  }
 });
 
 listen('download-progress', (event) => {
@@ -313,7 +443,12 @@ listen('download-done', (event) => {
   $folder.disabled = false;
   $stats.textContent = `Done: ${ok}/${total}`;
   $progressFill.style.width = '100%';
-  playlistVideos = [];
+
+  const $redownload = document.getElementById('btn-redownload');
+  if ($redownload && failedIndices.length > 0) {
+    $redownload.style.display = 'inline-block';
+    $redownload.textContent = `${t('redownload')} (${failedIndices.length})`;
+  }
 });
 
 function appendLog(text) {

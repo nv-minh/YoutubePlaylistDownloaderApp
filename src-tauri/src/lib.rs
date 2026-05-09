@@ -307,7 +307,7 @@ pub struct DownloadSettings {
     quality: String,
     format: String,
     proxy: Option<String>,
-    comments_only: bool,
+    include_comments: bool,
     auto_tag: bool,
     selected_indices: Vec<usize>,
 }
@@ -560,7 +560,8 @@ async fn start_download(
 
         let video_url = format!("https://www.youtube.com/watch?v={}", video.id);
 
-        // Download comments
+        // Download comments (if enabled)
+        if settings.include_comments {
         let mut comment_cmd = Command::new(&yt_path);
         comment_cmd
             .args(yt_dlp_extra());
@@ -592,13 +593,14 @@ async fn start_download(
                 }
             }
         }
+        }
 
         if cancel.0.load(Ordering::SeqCst) {
             break;
         }
 
         // Download video
-        if !settings.comments_only {
+        {
             let mut video_cmd = Command::new(&yt_path);
             video_cmd
                 .args(yt_dlp_extra());
@@ -677,8 +679,6 @@ async fn start_download(
                     app.emit("download-status", (idx, err.to_string())).ok();
                 }
             }
-        } else {
-            app.emit("download-status", (idx, "done".to_string())).ok();
         }
     }
 

@@ -2,6 +2,8 @@
 
 A native desktop app for downloading YouTube playlist videos and comments. Built with Tauri + Rust.
 
+![screenshot](screenshot.png)
+
 ## Features
 
 - **Playlist & Video Download** - Download all videos from a playlist or select specific ones
@@ -38,6 +40,11 @@ Go to [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/release
 2. Open [youtube.com](https://www.youtube.com) and log in
 3. Click the extension icon -> **Export**
 4. Copy the file content and paste it into the app
+
+### Troubleshooting
+- **"Cookie expired" error**: Your cookies may have expired. Re-export from browser and paste again
+- **"Members only" error**: You need to be a channel member and use fresh cookies
+- **Empty folders**: Usually means cookies expired - re-export and try again
 
 ## Development
 

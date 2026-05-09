@@ -277,9 +277,19 @@ fn generate_index_html(playlist_title: &str, videos: &[VideoInfo], base_dir: &Pa
         let folder_name = sanitize_folder_name(&video.title);
         let video_dir = base_dir.join(&folder_name);
 
-        let has_video = video_dir.join(format!("video.{}", "mp4")).exists()
-            || video_dir.join("video.webm").exists()
-            || video_dir.join("video.mkv").exists();
+        let has_video = {
+            let video_exts = ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"];
+            let prefix = slugify(&video.title);
+            if let Ok(entries) = fs::read_dir(&video_dir) {
+                entries.flatten().any(|e| {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    if name.starts_with(&format!("{}.", prefix)) || name.starts_with("video.") {
+                        let lower = name.to_lowercase();
+                        video_exts.iter().any(|ext| lower.ends_with(&format!(".{}", ext)))
+                    } else { false }
+                })
+            } else { false }
+        };
         let has_comments = video_dir.join("comments.html").exists();
 
         let dur = video.duration.map(|s| {
@@ -450,14 +460,24 @@ fn parse_title_metadata(title: &str) -> (String, String, String) {
 
 fn sanitize_folder_name(name: &str) -> String {
     let cleaned = RE_SANITIZE_FOLDER.replace_all(name, "").to_string();
-    // Strip non-ASCII characters (Vietnamese diacritics cause cp1252 errors on Windows)
-    let ascii: String = cleaned.chars().filter(|c| c.is_ascii()).collect();
-    let trimmed = ascii.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
     if trimmed.len() > 200 {
         trimmed[..200].to_string()
     } else {
         trimmed
     }
+}
+
+fn slugify(name: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    let slug: String = name.nfd()
+        .filter(|c| c.is_ascii() && (c.is_alphanumeric() || *c == ' '))
+        .collect::<String>()
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("-");
+    if slug.len() > 150 { slug[..150].trim_end_matches('-').to_string() } else { slug }
 }
 
 fn extract_playlist_id(url: &str) -> Option<String> {
@@ -955,8 +975,12 @@ async fn start_download(
         if settings.update_mode {
             let folder_name = sanitize_folder_name(&video.title);
             let video_dir_check = base_dir.join(&folder_name);
-            let exists = ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"]
-                .iter().any(|ext| video_dir_check.join(format!("video.{}", ext)).exists());
+            let check_slug = slugify(&video.title);
+            let video_exts = ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"];
+            let exists = video_exts.iter().any(|ext| {
+                video_dir_check.join(format!("{}.{}", check_slug, ext)).exists()
+                    || video_dir_check.join(format!("video.{}", ext)).exists()
+            });
             if exists {
                 app.emit("download-status", (i + 1, "Exists".to_string())).ok();
                 app.emit("download-log", format!("[{}] {} - already exists, skipping", i + 1, video.title)).ok();
@@ -987,6 +1011,7 @@ async fn start_download(
         let folder_name = sanitize_folder_name(&video.title);
         let video_dir = base_dir.join(&folder_name);
         fs::create_dir_all(&video_dir).ok();
+        let file_slug = slugify(&video.title);
 
         let video_url = format!("https://www.youtube.com/watch?v={}", video.id);
 
@@ -1004,7 +1029,7 @@ async fn start_download(
         comment_cmd
             .args(["--write-comments", "--skip-download", "--no-warnings", "--force-ipv4"])
             .arg("-o")
-            .arg(video_dir.join("video.%(ext)s").to_string_lossy().as_ref())
+            .arg(video_dir.join(format!("{}.%(ext)s", file_slug)).to_string_lossy().as_ref())
             .arg(&video_url);
 
         if let Ok(output) = comment_cmd.output().await {
@@ -1040,7 +1065,7 @@ async fn start_download(
             video_cmd
                 .args(["-f", &fmt])
                 .arg("-o")
-                .arg(video_dir.join("video.%(ext)s").to_string_lossy().as_ref())
+                .arg(video_dir.join(format!("{}.%(ext)s", file_slug)).to_string_lossy().as_ref())
                 .args(["--no-overwrites", "--continue", "--no-warnings", "--force-ipv4"])
                 .args(["--retries", "10", "--fragment-retries", "10"])
                 .args(["--socket-timeout", "30", "--throttled-rate", "100K"])
@@ -1136,11 +1161,38 @@ async fn start_download(
                 }
 
                 let ext = &settings.format;
-                let video_path = video_dir.join(format!("video.{}", ext));
+                // Find the actual video file (yt-dlp may add format codes like file_slug.f399.mp4)
+                let video_path = {
+                    let ideal = video_dir.join(format!("{}.{}", file_slug, ext));
+                    if ideal.exists() {
+                        ideal
+                    } else if let Ok(entries) = fs::read_dir(&video_dir) {
+                        let mut found = None;
+                        for entry in entries.flatten() {
+                            let name = entry.file_name().to_string_lossy().to_string();
+                            if name.starts_with(&format!("{}.", file_slug)) || name.starts_with("video.") {
+                                let lower = name.to_lowercase();
+                                if lower.ends_with(&format!(".{}", ext)) {
+                                    found = Some(entry.path());
+                                    break;
+                                }
+                            }
+                        }
+                        found.unwrap_or(ideal)
+                    } else {
+                        ideal
+                    }
+                };
 
                 match exit_status {
                     Ok(s) if s.success() && video_path.exists() => {
-                        let size_mb = video_path.metadata().map(|m| m.len()).unwrap_or(0) as f64
+                        // Rename to clean slug name if needed
+                        let clean_path = video_dir.join(format!("{}.{}", file_slug, ext));
+                        if video_path != clean_path {
+                            let _ = fs::rename(&video_path, &clean_path);
+                        }
+                        let final_path = if clean_path.exists() { &clean_path } else { &video_path };
+                        let size_mb = final_path.metadata().map(|m| m.len()).unwrap_or(0) as f64
                             / (1024.0 * 1024.0);
                         video_ok += 1;
                         app.emit(
@@ -1223,11 +1275,24 @@ fn check_existing_videos(
     if !base_dir.exists() {
         return vec![false; videos.len()];
     }
+    let video_exts = ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"];
     videos.iter().map(|v| {
         let folder = sanitize_folder_name(&v.title);
         let video_dir = base_dir.join(&folder);
-        ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"]
-            .iter().any(|ext| video_dir.join(format!("video.{}", ext)).exists())
+        if !video_dir.is_dir() { return false; }
+        let file_prefix = slugify(&v.title);
+        if let Ok(entries) = fs::read_dir(&video_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with(&format!("{}.", file_prefix)) || name.starts_with("video.") {
+                    let lower = name.to_lowercase();
+                    if video_exts.iter().any(|ext| lower.ends_with(&format!(".{}", ext))) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }).collect()
 }
 

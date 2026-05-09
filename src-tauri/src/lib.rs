@@ -1,10 +1,32 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::LazyLock;
 use tauri::{Emitter, State};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
+
+// ── Environment ────────────────────────────────────────────────────────
+
+// ── Pre-compiled Regexes ────────────────────────────────────────────────
+
+static RE_SANITIZE_FOLDER: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r#"[<>:"/\\|?*]"#).unwrap()
+});
+static RE_TITLE_METADATA: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r#"(?i)\s*[\(\[{].*?(official|video|mv|music|lyric|audio|4k|hd|1080p).*?[\)\]}]"#).unwrap()
+});
+static RE_PLAYLIST_ID: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"[?&]list=([a-zA-Z0-9_-]+)").unwrap()
+});
+static RE_PLAIN_ID: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"^[a-zA-Z0-9_-]+$").unwrap()
+});
+static RE_PROGRESS: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"\[download\]\s+([\d.]+)%").unwrap()
+});
 
 // ── Environment ────────────────────────────────────────────────────────
 
@@ -355,6 +377,12 @@ pub struct DownloadSettings {
     auto_tag: bool,
     selected_indices: Vec<usize>,
     single_video: bool,
+    inject_metadata: bool,
+    update_mode: bool,
+    export_comments: Option<String>,
+    download_subs: bool,
+    sub_langs: Option<String>,
+    auto_subs: bool,
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -385,9 +413,7 @@ fn parse_title_metadata(title: &str) -> (String, String, String) {
     if let Some(pos) = title.find(" - ") {
         let artist = title[..pos].trim().to_string();
         let rest = title[pos + 3..].trim();
-        // Remove common suffixes like (Official Video), [MV], etc.
-        let re = regex::Regex::new(r#"(?i)\s*[\(\[{].*?(official|video|mv|music|lyric|audio|4k|hd|1080p).*?[\)\]}]"#).unwrap();
-        let clean_title = re.replace_all(rest, "").trim().to_string();
+        let clean_title = RE_TITLE_METADATA.replace_all(rest, "").trim().to_string();
         let genre = String::new();
         return (artist, clean_title, genre);
     }
@@ -395,8 +421,7 @@ fn parse_title_metadata(title: &str) -> (String, String, String) {
 }
 
 fn sanitize_folder_name(name: &str) -> String {
-    let re = regex::Regex::new(r#"[<>:"/\\|?*]"#).unwrap();
-    let cleaned = re.replace_all(name, "").to_string();
+    let cleaned = RE_SANITIZE_FOLDER.replace_all(name, "").to_string();
     let trimmed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
     let chars: Vec<char> = trimmed.chars().collect();
     if chars.len() > 200 {
@@ -407,17 +432,199 @@ fn sanitize_folder_name(name: &str) -> String {
 }
 
 fn extract_playlist_id(url: &str) -> Option<String> {
-    let re = regex::Regex::new(r"[?&]list=([a-zA-Z0-9_-]+)").ok()?;
-    if let Some(caps) = re.captures(url) {
+    if let Some(caps) = RE_PLAYLIST_ID.captures(url) {
         return Some(caps[1].to_string());
     }
-    if regex::Regex::new(r"^[a-zA-Z0-9_-]+$")
-        .unwrap()
-        .is_match(url.trim())
+    if RE_PLAIN_ID.is_match(url.trim())
     {
         return Some(url.trim().to_string());
     }
     None
+}
+
+// ── Metadata Injection ──────────────────────────────────────────────────
+
+fn inject_metadata(
+    video_dir: &Path,
+    thumbnail_url: &str,
+    video_title: &str,
+    playlist_title: &str,
+    format: &str,
+) -> Result<(), String> {
+    let thumb_path = video_dir.join("thumb.jpg");
+    let ext = format;
+
+    // Download thumbnail
+    let curl_output = std::process::Command::new("curl")
+        .args(["-sL", thumbnail_url, "-o"])
+        .arg(&thumb_path)
+        .output()
+        .map_err(|e| format!("curl failed: {}", e))?;
+
+    if !curl_output.status.success() || !thumb_path.exists() {
+        return Err("Failed to download thumbnail".into());
+    }
+
+    let video_path = video_dir.join(format!("video.{}", ext));
+    let tagged_path = video_dir.join(format!("video_tagged.{}", ext));
+    if !video_path.exists() {
+        return Err("Video file not found".into());
+    }
+
+    let (artist, clean_title, _) = parse_title_metadata(video_title);
+    let is_audio = matches!(ext, "mp3" | "flac" | "wav" | "ogg" | "m4a");
+
+    let mut ffmpeg_cmd = std::process::Command::new("ffmpeg");
+    ffmpeg_cmd.arg("-y");
+    ffmpeg_cmd.arg("-i").arg(&video_path);
+    ffmpeg_cmd.arg("-i").arg(&thumb_path);
+
+    if is_audio {
+        ffmpeg_cmd.args(["-map", "0:a", "-map", "1:0", "-c:a", "copy"]);
+        if ext == "mp3" {
+            ffmpeg_cmd.args(["-c:v", "mjpeg", "-id3v2_version", "3"]);
+        } else {
+            ffmpeg_cmd.args(["-c:v", "copy"]);
+        }
+    } else {
+        ffmpeg_cmd.args(["-map", "0", "-map", "1:0", "-c", "copy"]);
+        ffmpeg_cmd.args(["-disposition:v:1", "attached_pic"]);
+    }
+
+    if !clean_title.is_empty() {
+        ffmpeg_cmd.args(["-metadata", &format!("title={}", clean_title)]);
+    }
+    if !artist.is_empty() {
+        ffmpeg_cmd.args(["-metadata", &format!("artist={}", artist)]);
+    }
+    if !playlist_title.is_empty() {
+        ffmpeg_cmd.args(["-metadata", &format!("album={}", playlist_title)]);
+    }
+
+    ffmpeg_cmd.arg(&tagged_path);
+
+    let output = ffmpeg_cmd.output().map_err(|e| format!("ffmpeg failed: {}", e))?;
+    if output.status.success() && tagged_path.exists() {
+        let _ = fs::remove_file(&video_path);
+        fs::rename(&tagged_path, &video_path).map_err(|e| format!("rename failed: {}", e))?;
+        let _ = fs::remove_file(&thumb_path);
+        Ok(())
+    } else {
+        let _ = fs::remove_file(&tagged_path);
+        Err(format!("ffmpeg error: {}", String::from_utf8_lossy(&output.stderr).chars().take(200).collect::<String>()))
+    }
+}
+
+// ── Comment Export ──────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct CommentExport {
+    video: String,
+    video_id: String,
+    comments: Vec<CommentEntry>,
+}
+
+#[derive(Serialize)]
+struct CommentEntry {
+    author: String,
+    text: String,
+    date: String,
+    likes: u64,
+    is_creator: bool,
+    parent: String,
+}
+
+fn export_comments_to_file(base_dir: &Path, format: &str) -> Result<String, String> {
+    let mut all_comments: Vec<CommentExport> = Vec::new();
+
+    let entries = fs::read_dir(base_dir).map_err(|e| e.to_string())?;
+    for entry in entries.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let video_dir = entry.path();
+        let comments = load_comments_for_video(&video_dir);
+        if comments.is_empty() {
+            continue;
+        }
+
+        // Try to get video info from .info.json
+        let mut video_title = String::from("Unknown");
+        let mut video_id = String::new();
+        if let Ok(dir_entries) = fs::read_dir(&video_dir) {
+            for de in dir_entries.flatten() {
+                let name = de.file_name().to_string_lossy().to_string();
+                if name.ends_with(".info.json") {
+                    if let Ok(data) = fs::read_to_string(de.path()) {
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
+                            video_title = json["title"].as_str().unwrap_or("Unknown").to_string();
+                            video_id = json["id"].as_str().unwrap_or("").to_string();
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        let entries: Vec<CommentEntry> = comments.iter().map(|c| {
+            let ts = c["timestamp"].as_u64().unwrap_or(0);
+            let date = chrono::DateTime::from_timestamp(ts as i64, 0)
+                .map(|dt| dt.format("%d/%m/%Y %H:%M").to_string())
+                .unwrap_or_default();
+            CommentEntry {
+                author: c["author"].as_str().unwrap_or("Anon").to_string(),
+                text: c["text"].as_str().unwrap_or("").to_string(),
+                date,
+                likes: c["like_count"].as_u64().unwrap_or(0),
+                is_creator: c["author_is_uploader"].as_bool().unwrap_or(false),
+                parent: c["parent"].as_str().unwrap_or("root").to_string(),
+            }
+        }).collect();
+
+        all_comments.push(CommentExport {
+            video: video_title,
+            video_id,
+            comments: entries,
+        });
+    }
+
+    if all_comments.is_empty() {
+        return Err("No comments found to export".into());
+    }
+
+    let total_comments: usize = all_comments.iter().map(|c| c.comments.len()).sum();
+
+    match format {
+        "json" => {
+            let json = serde_json::to_string_pretty(&all_comments)
+                .map_err(|e| format!("JSON error: {}", e))?;
+            let path = base_dir.join("comments.json");
+            fs::write(&path, json).map_err(|e| e.to_string())?;
+            Ok(format!("comments.json ({} comments)", total_comments))
+        }
+        "csv" => {
+            let path = base_dir.join("comments.csv");
+            let mut csv = String::from("Video,Video ID,Author,Comment,Date,Likes,Is Creator,Parent\n");
+            for entry in &all_comments {
+                for c in &entry.comments {
+                    csv.push_str(&format!(
+                        "\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n",
+                        entry.video.replace('"', "\"\""),
+                        entry.video_id,
+                        c.author.replace('"', "\"\""),
+                        c.text.replace('"', "\"\""),
+                        c.date,
+                        c.likes,
+                        c.is_creator,
+                        c.parent,
+                    ));
+                }
+            }
+            fs::write(&path, csv).map_err(|e| e.to_string())?;
+            Ok(format!("comments.csv ({} comments)", total_comments))
+        }
+        _ => Err(format!("Unknown format: {}", format)),
+    }
 }
 
 // ── Commands ───────────────────────────────────────────────────────────
@@ -512,9 +719,27 @@ async fn fetch_playlist(
                     .unwrap_or("YouTube Playlist")
                     .to_string();
             }
+            // Filter out unavailable/private/upcoming videos
+            let availability = data["availability"].as_str().unwrap_or("");
+            let live_status = data["live_status"].as_str().unwrap_or("");
+            if availability == "private"
+                || availability == "premium_only"
+                || live_status == "is_upcoming"
+                || live_status == "post_live"
+            {
+                continue;
+            }
+            // Skip videos with no title or "Deleted" / "Private" placeholders
+            let title = data["title"].as_str().unwrap_or("");
+            if title.is_empty()
+                || title == "[Private video]"
+                || title == "[Deleted video]"
+            {
+                continue;
+            }
             videos.push(VideoInfo {
                 id: data["id"].as_str().unwrap_or("").to_string(),
-                title: data["title"].as_str().unwrap_or("Unknown").to_string(),
+                title: title.to_string(),
                 channel: data["channel"].as_str().unwrap_or("").to_string(),
                 duration: data["duration"].as_u64(),
                 thumbnail: data["thumbnail"]
@@ -623,6 +848,16 @@ async fn start_download(
     }
 
     let total = videos.len();
+
+    // Wrap in playlist-named subfolder for playlist mode
+    let base_dir = if settings.single_video {
+        base_dir
+    } else {
+        let playlist_folder = base_dir.join(sanitize_folder_name(&playlist_title));
+        fs::create_dir_all(&playlist_folder).map_err(|e| e.to_string())?;
+        playlist_folder
+    };
+
     app.emit(
         "download-log",
         if settings.single_video {
@@ -632,6 +867,9 @@ async fn start_download(
         },
     )
     .ok();
+
+    let selected_count = selected.len();
+    let mut completed: usize = 0;
 
     for (i, video) in videos.iter().enumerate() {
         if !selected.contains(&i) {
@@ -643,8 +881,28 @@ async fn start_download(
             break;
         }
 
+        // Update mode: skip already downloaded videos
+        if settings.update_mode {
+            let folder_name = sanitize_folder_name(&video.title);
+            let video_dir_check = base_dir.join(&folder_name);
+            let exists = ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"]
+                .iter().any(|ext| video_dir_check.join(format!("video.{}", ext)).exists());
+            if exists {
+                app.emit("download-status", (i + 1, "Exists".to_string())).ok();
+                app.emit("download-log", format!("[{}] {} - already exists, skipping", i + 1, video.title)).ok();
+                video_ok += 1;
+                continue;
+            }
+        }
+
+        if cancel.0.load(Ordering::SeqCst) {
+            app.emit("download-log", "Cancelled.".to_string()).ok();
+            break;
+        }
+
         let idx = i + 1;
-        app.emit("download-progress", (idx, total)).ok();
+        completed += 1;
+        app.emit("download-progress", (completed, selected_count)).ok();
         app.emit(
             "download-status",
             (idx, "downloading".to_string()),
@@ -738,45 +996,99 @@ async fn start_download(
                 }
             }
 
+            // Subtitles
+            if settings.download_subs && !is_audio {
+                video_cmd.args(["--write-subs", "--convert-subs", "srt"]);
+                if settings.auto_subs {
+                    video_cmd.arg("--write-auto-subs");
+                }
+                let langs = settings.sub_langs.as_deref().unwrap_or("en");
+                video_cmd.args(["--sub-langs", langs]);
+                // Embed subs for mp4/webm/mkv
+                if matches!(settings.format.as_str(), "mp4" | "webm" | "mkv") {
+                    video_cmd.arg("--embed-subs");
+                }
+            }
+
             if let Some(ref p) = settings.proxy {
                 video_cmd.args(["--proxy", p]);
             }
 
             video_cmd.arg(&video_url);
 
-            if let Ok(output) = video_cmd.output().await {
+            // Spawn with piped stdout for real-time progress parsing
+            video_cmd.stdout(std::process::Stdio::piped());
+            video_cmd.stderr(std::process::Stdio::piped());
+
+            if let Ok(mut child) = video_cmd.spawn() {
+                let stdout = child.stdout.take();
+                let stderr_handle = child.stderr.take();
+                let progress_re = &*RE_PROGRESS;
+
+                // Parse progress from stdout
+                if let Some(stdout) = stdout {
+                    let reader = BufReader::new(stdout);
+                    let mut lines = reader.lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        if let Some(caps) = progress_re.captures(&line) {
+                            let pct = &caps[1];
+                            app.emit("download-status", (idx, format!("downloading {}%", pct))).ok();
+                        }
+                    }
+                }
+
+                // Wait for process to finish
+                let exit_status = child.wait().await;
+
+                // Read stderr for error messages
+                let mut stderr_buf = String::new();
+                if let Some(stderr) = stderr_handle {
+                    let mut reader = BufReader::new(stderr);
+                    let _ = reader.read_to_string(&mut stderr_buf).await;
+                }
+
                 let ext = &settings.format;
                 let video_path = video_dir.join(format!("video.{}", ext));
-                if output.status.success() && video_path.exists() {
-                    let size_mb = video_path.metadata().map(|m| m.len()).unwrap_or(0) as f64
-                        / (1024.0 * 1024.0);
-                    video_ok += 1;
-                    app.emit(
-                        "download-log",
-                        format!("  -> Video OK ({:.1} MB)", size_mb),
-                    )
-                    .ok();
-                    app.emit("download-status", (idx, "done".to_string())).ok();
-                } else {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    let err = if stderr.contains("members-only")
-                        || stderr.contains("Join this channel")
-                    {
-                        "Members only"
-                    } else if stderr.contains("Video unavailable") || stderr.contains("Private") {
-                        "Unavailable"
-                    } else if stderr.contains("Sign in") || stderr.contains("bot") || stderr.contains("cookie") || stderr.contains("HTTP Error 403") {
-                        "Cookie expired"
-                    } else {
-                        "Failed"
-                    };
-                    for line in stderr.lines().take(40) {
-                        app.emit("download-log", format!("  | {}", line)).ok();
+
+                match exit_status {
+                    Ok(s) if s.success() && video_path.exists() => {
+                        let size_mb = video_path.metadata().map(|m| m.len()).unwrap_or(0) as f64
+                            / (1024.0 * 1024.0);
+                        video_ok += 1;
+                        app.emit(
+                            "download-log",
+                            format!("  -> Video OK ({:.1} MB)", size_mb),
+                        )
+                        .ok();
+                        app.emit("download-status", (idx, "done".to_string())).ok();
+
+                        // Metadata injection
+                        if settings.inject_metadata {
+                            if let Err(e) = inject_metadata(&video_dir, &video.thumbnail, &video.title, &playlist_title, &settings.format) {
+                                app.emit("download-log", format!("  -> Metadata error: {}", e)).ok();
+                            }
+                        }
                     }
-                    if err == "Cookie expired" || err == "Members only" {
-                        app.emit("download-log", "  Hint: Your cookies may have expired. Please re-export from browser and paste again.".to_string()).ok();
+                    _ => {
+                        let err = if stderr_buf.contains("members-only")
+                            || stderr_buf.contains("Join this channel")
+                        {
+                            "Members only"
+                        } else if stderr_buf.contains("Video unavailable") || stderr_buf.contains("Private") {
+                            "Unavailable"
+                        } else if stderr_buf.contains("Sign in") || stderr_buf.contains("bot") || stderr_buf.contains("cookie") || stderr_buf.contains("HTTP Error 403") {
+                            "Cookie expired"
+                        } else {
+                            "Failed"
+                        };
+                        for line in stderr_buf.lines().take(40) {
+                            app.emit("download-log", format!("  | {}", line)).ok();
+                        }
+                        if err == "Cookie expired" || err == "Members only" {
+                            app.emit("download-log", "  Hint: Your cookies may have expired. Please re-export from browser and paste again.".to_string()).ok();
+                        }
+                        app.emit("download-status", (idx, err.to_string())).ok();
                     }
-                    app.emit("download-status", (idx, err.to_string())).ok();
                 }
             }
         }
@@ -795,7 +1107,15 @@ async fn start_download(
     generate_index_html(&playlist_title, &videos, &base_dir, video_ok, total_comments);
     app.emit("download-log", "Report saved: index.html".to_string()).ok();
 
-    app.emit("download-done", (video_ok, total)).ok();
+    // Export comments if enabled
+    if let Some(ref export_fmt) = settings.export_comments {
+        match export_comments_to_file(&base_dir, export_fmt) {
+            Ok(msg) => { app.emit("download-log", format!("Exported: {}", msg)).ok(); }
+            Err(e) => { app.emit("download-log", format!("Export error: {}", e)).ok(); }
+        }
+    }
+
+    app.emit("download-done", (video_ok, total, base_dir.to_string_lossy().to_string())).ok();
 
     Ok(())
 }
@@ -806,10 +1126,32 @@ fn cancel_download(cancel: State<'_, CancelState>) {
 }
 
 #[tauri::command]
+fn check_existing_videos(
+    output_dir: String,
+    playlist_title: String,
+    videos: Vec<VideoInfo>,
+) -> Vec<bool> {
+    let base_dir = PathBuf::from(&output_dir).join(sanitize_folder_name(&playlist_title));
+    if !base_dir.exists() {
+        return vec![false; videos.len()];
+    }
+    videos.iter().map(|v| {
+        let folder = sanitize_folder_name(&v.title);
+        let video_dir = base_dir.join(&folder);
+        ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"]
+            .iter().any(|ext| video_dir.join(format!("video.{}", ext)).exists())
+    }).collect()
+}
+
+#[tauri::command]
 fn save_cookie_text(text: String) -> Result<String, String> {
     let temp_dir = std::env::temp_dir().join("yt-downloader-cookies");
     fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
-    let path = temp_dir.join("cookies.txt");
+    let filename = format!("cookies_{}.txt", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+    let path = temp_dir.join(&filename);
     fs::write(&path, &text).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
 }
@@ -852,6 +1194,7 @@ pub fn run() {
             fetch_playlist,
             start_download,
             cancel_download,
+            check_existing_videos,
             save_cookie_text,
             open_folder,
         ])

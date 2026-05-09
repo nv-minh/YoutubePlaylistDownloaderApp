@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' https://i.ytimg.com https://ui-avatars.com https://*.googleusercontent.com data:; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.googleapis.com; media-src 'self'"
     }
   },
   "bundle": {

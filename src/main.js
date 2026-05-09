@@ -19,6 +19,14 @@ const translations = {
     proxy: "Proxy (tùy chọn)",
     autoTag: "Tự động gắn tag (artist, title, genre)",
     commentsOnly: "Tải bình luận (comments)",
+    injectMetadata: "Gắn metadata (ảnh bìa, nghệ sĩ, album)",
+    updateMode: "Chế độ cập nhật (bỏ qua đã tải)",
+    exportComments: "Xuất bình luận", exportNone: "Không",
+    statusExists: "Đã có",
+    downloadSubs: "Tải phụ đề (subtitles)",
+    subLangs: "Ngôn ngữ phụ đề",
+    subLangCustom: "Tùy chỉnh...",
+    deleteVideo: "Xóa video này",
     startDownload: "Bắt đầu tải", stop: "Dừng",
     openFolder: "Mở thư mục", clear: "Xóa",
     queueEmpty: "Dán link playlist/video và bấm Bắt đầu",
@@ -44,6 +52,14 @@ const translations = {
     proxy: "Proxy (optional)",
     autoTag: "Auto-tag (artist, title, genre)",
     commentsOnly: "Include comments",
+    injectMetadata: "Inject metadata (thumbnail, artist, album)",
+    updateMode: "Update mode (skip already downloaded)",
+    exportComments: "Export comments", exportNone: "None",
+    statusExists: "Exists",
+    downloadSubs: "Download subtitles",
+    subLangs: "Subtitle language",
+    subLangCustom: "Custom...",
+    deleteVideo: "Remove this video",
     startDownload: "Start Download", stop: "Stop",
     openFolder: "Open Folder", clear: "Clear",
     queueEmpty: "Paste a playlist/video URL and click Start",
@@ -83,6 +99,14 @@ const $format = document.getElementById('format');
 const $proxy = document.getElementById('proxy');
 const $autoTag = document.getElementById('auto-tag');
 const $commentsOnly = document.getElementById('comments-only');
+const $injectMetadata = document.getElementById('inject-metadata');
+const $updateMode = document.getElementById('update-mode');
+const $exportComments = document.getElementById('export-comments');
+const $downloadSubs = document.getElementById('download-subs');
+const $subLangSelect = document.getElementById('sub-lang-select');
+const $subLangs = document.getElementById('sub-langs');
+const $subCustom = document.getElementById('sub-custom');
+const $subOptions = document.getElementById('sub-options');
 const $start = document.getElementById('btn-start');
 const $stop = document.getElementById('btn-stop');
 const $queue = document.getElementById('queue');
@@ -94,13 +118,33 @@ const $ytdlpStatus = document.getElementById('ytdlp-status');
 const $lang = document.getElementById('lang');
 
 let outputDir = '';
+let actualDir = ''; // tracks the playlist subfolder
 let accessType = 'public';
 let downloadMode = 'playlist'; // 'playlist' or 'video'
 let playlistVideos = [];
 let failedIndices = [];
 
+const deleteIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+
 // ── Language switch ───────────────────────────────────────────────────
 $lang.addEventListener('change', () => applyTranslations());
+
+// ── Subtitle toggle ───────────────────────────────────────────────────
+$downloadSubs.addEventListener('change', () => {
+  $subOptions.style.display = $downloadSubs.checked ? 'block' : 'none';
+});
+
+$subLangSelect.addEventListener('change', () => {
+  $subCustom.style.display = $subLangSelect.value === 'custom' ? 'block' : 'none';
+});
+
+function getSubLangs() {
+  if (!$downloadSubs.checked) return null;
+  if ($subLangSelect.value === 'custom') {
+    return $subLangs.value.trim() || null;
+  }
+  return $subLangSelect.value;
+}
 
 // ── Access tab switching ──────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
@@ -184,6 +228,7 @@ function updateCardStyles() {
 document.getElementById('btn-clear').addEventListener('click', () => {
   playlistVideos = [];
   failedIndices = [];
+  actualDir = '';
   $url.value = '';
   $urlVideo.value = '';
   $log.innerHTML = '';
@@ -199,15 +244,17 @@ document.getElementById('btn-clear').addEventListener('click', () => {
 
 // ── Start download ────────────────────────────────────────────────────
 $start.addEventListener('click', async () => {
+  if ($start.disabled) return;
+  $start.disabled = true;
   const url = (downloadMode === 'video' ? $urlVideo.value.trim() : $url.value.trim());
-  if (!url) { (downloadMode === 'video' ? $urlVideo : $url).focus(); return; }
+  if (!url) { $start.disabled = false; (downloadMode === 'video' ? $urlVideo : $url).focus(); return; }
 
   const cookieFile = await getCookieFile();
-  if (cookieFile === null) return;
+  if (cookieFile === null) { $start.disabled = false; return; }
 
   if (!outputDir) {
     const selected = await open({ directory: true });
-    if (!selected) return;
+    if (!selected) { $start.disabled = false; return; }
     outputDir = selected;
     $output.value = selected;
   }
@@ -235,6 +282,12 @@ $start.addEventListener('click', async () => {
           auto_tag: $autoTag.checked,
           selected_indices: [],
           single_video: true,
+          inject_metadata: $injectMetadata.checked,
+          update_mode: $updateMode.checked,
+          export_comments: $exportComments.value || null,
+          download_subs: $downloadSubs.checked,
+          sub_langs: getSubLangs(),
+          auto_subs: true,
         },
       });
     } catch (e) {
@@ -248,15 +301,16 @@ $start.addEventListener('click', async () => {
   // Playlist mode
   const selectedIndices = [];
   document.querySelectorAll('.video-check:checked').forEach(cb => {
-    selectedIndices.push(parseInt(cb.dataset.index));
+    const idx = parseInt(cb.dataset.index);
+    if (playlistVideos[idx] !== null) selectedIndices.push(idx);
   });
 
   if (playlistVideos.length > 0 && selectedIndices.length === 0) {
     alert('Please select at least one video.');
+    $start.disabled = false;
     return;
   }
 
-  $start.disabled = true;
   $stop.disabled = false;
   $folder.disabled = true;
   $log.innerHTML = '';
@@ -277,9 +331,21 @@ $start.addEventListener('click', async () => {
         url, cookieFile: cookieFile || '', proxy: $proxy.value || null,
       });
       playlistVideos = result.videos;
-      renderQueue(result.videos);
+
+      // Check existing videos if update mode is on
+      let existing = null;
+      if ($updateMode.checked && outputDir) {
+        try {
+          existing = await invoke('check_existing_videos', {
+            outputDir, playlistTitle: result.title, videos: result.videos,
+          });
+        } catch {}
+      }
+
+      renderQueue(result.videos, existing);
       $log.innerHTML = '';
-      appendLog(`${result.title} (${result.videos.length} videos)`);
+      const newCount = existing ? existing.filter(e => !e).length : result.videos.length;
+      appendLog(`${result.title} (${result.videos.length} videos${existing ? `, ${newCount} new` : ''})`);
       $start.disabled = false;
       return;
     }
@@ -296,6 +362,12 @@ $start.addEventListener('click', async () => {
         auto_tag: $autoTag.checked,
         selected_indices: selectedIndices,
         single_video: false,
+        inject_metadata: $injectMetadata.checked,
+        update_mode: $updateMode.checked,
+        export_comments: $exportComments.value || null,
+        download_subs: $downloadSubs.checked,
+        sub_langs: getSubLangs(),
+        auto_subs: true,
       },
     });
   } catch (e) {
@@ -314,7 +386,8 @@ $stop.addEventListener('click', () => {
 
 // ── Open folder ───────────────────────────────────────────────────────
 $folder.addEventListener('click', () => {
-  if (outputDir) invoke('open_folder', { path: outputDir });
+  const dir = actualDir || outputDir;
+  if (dir) invoke('open_folder', { path: dir });
 });
 
 // ── Redownload failed ─────────────────────────────────────────────────
@@ -353,6 +426,12 @@ document.getElementById('btn-redownload').addEventListener('click', async () => 
         auto_tag: $autoTag.checked,
         selected_indices: indices,
         single_video: false,
+        inject_metadata: $injectMetadata.checked,
+        update_mode: $updateMode.checked,
+        export_comments: $exportComments.value || null,
+        download_subs: $downloadSubs.checked,
+        sub_langs: getSubLangs(),
+        auto_subs: true,
       },
     });
   } catch (e) {
@@ -363,23 +442,26 @@ document.getElementById('btn-redownload').addEventListener('click', async () => 
 });
 
 // ── Render queue as cards with checkboxes ─────────────────────────────
-function renderQueue(videos) {
+function renderQueue(videos, existing = null) {
   playlistVideos = videos;
+  const checkedCount = existing ? existing.filter(e => !e).length : videos.length;
+  const allChecked = !existing || checkedCount === videos.length;
   const header = `
     <div class="queue-header">
       <label class="select-all">
-        <input type="checkbox" id="select-all" checked />
+        <input type="checkbox" id="select-all" ${allChecked ? 'checked' : ''} />
         <span>${t('selectAll')}</span>
       </label>
-      <span class="count">${videos.length}/${videos.length} ${t('selected')}</span>
+      <span class="count">${checkedCount}/${videos.length} ${t('selected')}</span>
     </div>`;
 
   const cards = videos.map((v, i) => {
     const dur = v.duration ? formatDuration(v.duration) : '';
+    const isExisting = existing && existing[i];
     return `
-    <div class="video-card" id="row-${i + 1}">
+    <div class="video-card${isExisting ? ' unchecked' : ''}" id="row-${i + 1}">
       <div class="check-col">
-        <input type="checkbox" class="video-check" data-index="${i}" checked />
+        <input type="checkbox" class="video-check" data-index="${i}" ${isExisting ? '' : 'checked'} />
       </div>
       <img class="thumb" src="${v.thumbnail}" alt="" onerror="this.style.display='none'" />
       <div class="info">
@@ -387,7 +469,8 @@ function renderQueue(videos) {
         <div class="channel">${escapeHtml(v.channel)}</div>
         <div class="meta">${dur ? `<span class="dur">${dur}</span>` : ''}</div>
       </div>
-      <span class="status pending" id="status-${i + 1}">Pending</span>
+      <span class="status ${isExisting ? 'done' : 'pending'}" id="status-${i + 1}">${isExisting ? (t('statusExists') || 'Exists') : 'Pending'}</span>
+      <button class="btn-delete-card" data-index="${i}" title="${t('deleteVideo')}">${deleteIcon}</button>
     </div>`;
   }).join('');
 
@@ -402,10 +485,29 @@ function renderQueue(videos) {
   // Click on card row to toggle checkbox
   document.querySelectorAll('.video-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'A') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'A' || e.target.tagName === 'BUTTON' || e.target.closest('.btn-delete-card')) return;
       const cb = card.querySelector('.video-check');
       cb.checked = !cb.checked;
       updateCardStyles();
+    });
+  });
+  // Delete button handler
+  document.querySelectorAll('.btn-delete-card').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.index);
+      const card = document.getElementById(`row-${idx + 1}`);
+      if (card) {
+        card.style.transition = 'opacity 0.2s, transform 0.2s';
+        card.style.opacity = '0';
+        card.style.transform = 'translateX(20px)';
+        setTimeout(() => {
+          card.remove();
+          playlistVideos[idx] = null;
+          failedIndices = failedIndices.filter(fi => fi !== idx);
+          updateCardStyles();
+        }, 200);
+      }
     });
   });
 }
@@ -424,11 +526,21 @@ listen('download-log', (event) => appendLog(event.payload));
 listen('download-status', (event) => {
   const [idx, status] = event.payload;
   const el = document.getElementById(`status-${idx}`);
-  if (el) { el.textContent = status; el.className = `status ${status}`; }
+  if (!el) return;
+  if (status.startsWith('downloading')) {
+    el.textContent = status;
+    el.className = 'status downloading';
+  } else if (status === 'Exists') {
+    el.textContent = t('statusExists') || 'Exists';
+    el.className = 'status done';
+  } else {
+    el.textContent = status;
+    el.className = `status ${status}`;
+  }
   const videoIdx = idx - 1;
   if (['Failed', 'Members only', 'Unavailable', 'Cookie expired'].includes(status)) {
     if (!failedIndices.includes(videoIdx)) failedIndices.push(videoIdx);
-  } else if (status === 'done') {
+  } else if (status === 'done' || status === 'Exists') {
     failedIndices = failedIndices.filter(i => i !== videoIdx);
   }
 });
@@ -440,12 +552,13 @@ listen('download-progress', (event) => {
 });
 
 listen('download-done', (event) => {
-  const [ok, total] = event.payload;
+  const [ok, total, folderPath] = event.payload;
   $start.disabled = false;
   $stop.disabled = true;
   $folder.disabled = false;
   $stats.textContent = `Done: ${ok}/${total}`;
   $progressFill.style.width = '100%';
+  actualDir = folderPath || outputDir;
 
   const $redownload = document.getElementById('btn-redownload');
   if ($redownload && failedIndices.length > 0) {

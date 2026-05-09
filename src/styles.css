@@ -343,13 +343,30 @@ textarea {
   font-size: 10px; font-weight: 600;
   padding: 3px 8px; border-radius: var(--radius-pill);
   white-space: nowrap; flex-shrink: 0;
+  min-width: 50px; text-align: center;
 }
-.status.pending { background: var(--surface-2); color: var(--status-pending); }
 .status.downloading { background: rgba(0,102,204,0.15); color: var(--status-downloading); }
+.status.pending { background: var(--surface-2); color: var(--status-pending); }
 .status.done { background: rgba(76,175,80,0.15); color: var(--status-done); }
 .status.Failed, .status.failed { background: rgba(204,0,0,0.15); color: var(--status-failed); }
 .status.Members\ only { background: rgba(255,152,0,0.15); color: var(--status-skipped); }
 .status.Unavailable { background: rgba(255,152,0,0.15); color: var(--status-skipped); }
+
+.btn-delete-card {
+  background: none; border: none; color: var(--ink-muted);
+  cursor: pointer; padding: 4px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: all 0.15s; flex-shrink: 0;
+}
+.video-card:hover .btn-delete-card { opacity: 1; }
+.btn-delete-card:hover { color: var(--status-failed); background: rgba(204,0,0,0.1); }
+
+.sub-options {
+  display: flex; flex-direction: column; gap: 4px;
+  padding-left: 26px;
+}
+.sub-options .field { gap: 4px; }
+.sub-custom { margin-top: -4px; }
 
 /* ── Log ────────────────────────────────── */
 .log-panel {

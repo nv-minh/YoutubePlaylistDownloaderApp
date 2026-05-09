@@ -234,6 +234,7 @@ $start.addEventListener('click', async () => {
           include_comments: $commentsOnly.checked,
           auto_tag: $autoTag.checked,
           selected_indices: [],
+          single_video: true,
         },
       });
     } catch (e) {
@@ -294,6 +295,7 @@ $start.addEventListener('click', async () => {
         include_comments: $commentsOnly.checked,
         auto_tag: $autoTag.checked,
         selected_indices: selectedIndices,
+        single_video: false,
       },
     });
   } catch (e) {
@@ -350,6 +352,7 @@ document.getElementById('btn-redownload').addEventListener('click', async () => 
         include_comments: $commentsOnly.checked,
         auto_tag: $autoTag.checked,
         selected_indices: indices,
+        single_video: false,
       },
     });
   } catch (e) {

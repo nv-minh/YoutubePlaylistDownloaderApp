@@ -310,6 +310,7 @@ pub struct DownloadSettings {
     include_comments: bool,
     auto_tag: bool,
     selected_indices: Vec<usize>,
+    single_video: bool,
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -486,6 +487,40 @@ async fn fetch_playlist(
     })
 }
 
+async fn fetch_single_video(
+    url: String,
+    cookie_file: String,
+    proxy: Option<String>,
+    path_state: State<'_, YtDlpPath>,
+) -> Result<VideoInfo, String> {
+    let yt_path = path_state.0.lock().await;
+    let mut cmd = Command::new(&*yt_path);
+    cmd.args(yt_dlp_extra());
+    if !cookie_file.is_empty() {
+        cmd.args(["--cookies", &cookie_file]);
+    }
+    cmd.args(["--dump-json"]).arg(&url);
+    if let Some(ref p) = proxy {
+        cmd.args(["--proxy", p]);
+    }
+
+    let output = cmd.output().await.map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    let data: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&output.stdout))
+        .map_err(|e| format!("Parse error: {}", e))?;
+
+    Ok(VideoInfo {
+        id: data["id"].as_str().unwrap_or("").to_string(),
+        title: data["title"].as_str().unwrap_or("Unknown").to_string(),
+        channel: data["channel"].as_str().unwrap_or("").to_string(),
+        duration: data["duration"].as_u64(),
+        thumbnail: data["thumbnail"].as_str().unwrap_or("").to_string(),
+    })
+}
+
 #[tauri::command]
 async fn start_download(
     settings: DownloadSettings,
@@ -504,34 +539,57 @@ async fn start_download(
     let mut comment_ok = 0u32;
     let mut total_comments = 0u32;
 
-    let playlist_url = match extract_playlist_id(&settings.playlist_url) {
-        Some(id) => format!("https://www.youtube.com/playlist?list={}", id),
-        None => settings.playlist_url.clone(),
-    };
+    let playlist_title: String;
+    let videos: Vec<VideoInfo>;
+    let selected: Vec<usize>;
 
-    // Fetch playlist
-    let result = fetch_playlist(
-        playlist_url,
-        settings.cookie_file.clone(),
-        settings.proxy.clone(),
-        path_state.clone(),
-    )
-    .await?;
+    if settings.single_video {
+        // Single video mode - fetch just one video
+        let video = fetch_single_video(
+            settings.playlist_url.clone(),
+            settings.cookie_file.clone(),
+            settings.proxy.clone(),
+            path_state.clone(),
+        )
+        .await?;
+        playlist_title = video.title.clone();
+        videos = vec![video];
+        selected = vec![0];
+    } else {
+        // Playlist mode
+        let playlist_url = match extract_playlist_id(&settings.playlist_url) {
+            Some(id) => format!("https://www.youtube.com/playlist?list={}", id),
+            None => settings.playlist_url.clone(),
+        };
 
-    let total = result.videos.len();
+        let result = fetch_playlist(
+            playlist_url,
+            settings.cookie_file.clone(),
+            settings.proxy.clone(),
+            path_state.clone(),
+        )
+        .await?;
+        playlist_title = result.title.clone();
+        videos = result.videos;
+        selected = if settings.selected_indices.is_empty() {
+            (0..videos.len()).collect()
+        } else {
+            settings.selected_indices.clone()
+        };
+    }
+
+    let total = videos.len();
     app.emit(
         "download-log",
-        format!("Playlist: {} ({} videos)", result.title, total),
+        if settings.single_video {
+            format!("Video: {}", playlist_title)
+        } else {
+            format!("Playlist: {} ({} videos)", playlist_title, total)
+        },
     )
     .ok();
 
-    let selected: Vec<usize> = if settings.selected_indices.is_empty() {
-        (0..result.videos.len()).collect()
-    } else {
-        settings.selected_indices.clone()
-    };
-
-    for (i, video) in result.videos.iter().enumerate() {
+    for (i, video) in videos.iter().enumerate() {
         if !selected.contains(&i) {
             app.emit("download-status", (i + 1, "Skipped".to_string())).ok();
             continue;
@@ -692,7 +750,7 @@ async fn start_download(
     .ok();
 
     // Generate index.html report
-    generate_index_html(&result.title, &result.videos, &base_dir, video_ok, total_comments);
+    generate_index_html(&playlist_title, &videos, &base_dir, video_ok, total_comments);
     app.emit("download-log", "Report saved: index.html".to_string()).ok();
 
     app.emit("download-done", (video_ok, total)).ok();

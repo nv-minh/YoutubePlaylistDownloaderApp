@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YT Playlist Downloader</title>
+    <script type="module" src="/main.js" defer></script>
+  </head>
+  <body>
+    <div class="app">
+      <!-- Header -->
+      <div class="header">
+        <h1>YT Playlist Downloader</h1>
+        <span class="ytdlp-status" id="ytdlp-status">Checking yt-dlp...</span>
+      </div>
+
+      <!-- Settings -->
+      <div class="settings">
+        <div class="field">
+          <label>Playlist URL</label>
+          <input type="text" id="url" placeholder="Paste YouTube playlist or video URL..." />
+        </div>
+
+        <div class="field">
+          <label>Cookie File</label>
+          <div class="row-input">
+            <input type="text" id="cookie" placeholder="cookies.txt" value="cookies.txt" />
+            <button class="btn-browse" id="btn-cookie">Browse</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Save To</label>
+          <div class="row-input">
+            <input type="text" id="output" placeholder="Select output folder..." />
+            <button class="btn-browse" id="btn-output">Browse</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Video Quality</label>
+          <select id="quality">
+            <option value="Best">Best</option>
+            <option value="1080p">1080p</option>
+            <option value="720p">720p</option>
+            <option value="480p">480p</option>
+            <option value="Audio only">Audio only</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Proxy (optional)</label>
+          <input type="text" id="proxy" placeholder="socks5://127.0.0.1:1080" />
+        </div>
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="comments-only" />
+          Comments only (skip video download)
+        </label>
+
+        <div class="field">
+          <label>Concurrent Downloads</label>
+          <select id="concurrent">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+          </select>
+        </div>
+
+        <button class="btn-start" id="btn-start">Start Download</button>
+        <button class="btn-stop" id="btn-stop" disabled>Stop</button>
+      </div>
+
+      <!-- Queue -->
+      <div class="queue" id="queue">
+        <div class="queue-empty">Paste a playlist URL and click Start</div>
+      </div>
+
+      <!-- Log -->
+      <div class="log-panel" id="log"></div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <div class="progress-bar">
+          <div class="fill" id="progress-fill"></div>
+        </div>
+        <span class="stats" id="stats"></span>
+        <button class="btn-folder" id="btn-folder" disabled>Open Folder</button>
+      </div>
+    </div>
+  </body>
+</html>

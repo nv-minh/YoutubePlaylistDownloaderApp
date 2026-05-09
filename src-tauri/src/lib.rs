@@ -6,6 +6,50 @@ use tauri::{Emitter, State};
 use tokio::process::Command;
 use tokio::sync::Mutex;
 
+// ── Environment ────────────────────────────────────────────────────────
+
+fn setup_env(cmd: &mut Command) {
+    // Ensure node is findable when launched from Finder/Dock
+    let home = std::env::var("HOME").unwrap_or_default();
+
+    // Detect all nvm node versions
+    let mut nvm_paths: Vec<String> = vec![];
+    let nvm_dir = PathBuf::from(format!("{}/.nvm/versions/node", home));
+    if let Ok(entries) = fs::read_dir(&nvm_dir) {
+        for entry in entries.flatten() {
+            if entry.path().join("bin/node").exists() {
+                nvm_paths.push(entry.path().join("bin").to_string_lossy().to_string());
+            }
+        }
+    }
+    // Fallback hardcoded path
+    if nvm_paths.is_empty() {
+        nvm_paths.push(format!("{}/.nvm/versions/node/v20.14.0/bin", home));
+    }
+
+    let mut paths: Vec<String> = nvm_paths;
+    paths.push(format!("{}/.cargo/bin", home));
+    paths.push("/usr/local/bin".into());
+    paths.push("/opt/homebrew/bin".into());
+    paths.push("/usr/bin".into());
+
+    if let Ok(existing) = std::env::var("PATH") {
+        for p in existing.split(':') {
+            let s = p.to_string();
+            if !paths.contains(&s) {
+                paths.push(s);
+            }
+        }
+    }
+    cmd.env("PATH", paths.join(":"));
+}
+
+fn new_cmd(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+    setup_env(&mut cmd);
+    cmd
+}
+
 // ── HTML Generation ────────────────────────────────────────────────────
 
 fn load_comments_for_video(video_dir: &PathBuf) -> Vec<serde_json::Value> {
@@ -381,8 +425,8 @@ fn extract_playlist_id(url: &str) -> Option<String> {
 #[tauri::command]
 async fn check_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, String> {
     let path = path_state.0.lock().await;
-    let output = Command::new(&*path)
-        .arg("--version")
+    let mut cmd = new_cmd(&*path);
+    let output = cmd.arg("--version")
         .output()
         .await
         .map_err(|e| format!("yt-dlp not found: {}", e))?;
@@ -401,14 +445,14 @@ async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, Strin
     } else {
         "python3"
     };
-    let output = Command::new(python)
+    let output = new_cmd(python)
         .args(["-m", "pip", "install", "--upgrade", "yt-dlp"])
         .output()
         .await
         .map_err(|e| format!("pip failed: {}", e))?;
     if output.status.success() {
         let path = path_state.0.lock().await;
-        let version_output = Command::new(&*path)
+        let version_output = new_cmd(&*path)
             .arg("--version")
             .output()
             .await
@@ -434,7 +478,7 @@ async fn fetch_playlist(
     };
 
     let yt_path = path_state.0.lock().await;
-    let mut cmd = Command::new(&*yt_path);
+    let mut cmd = new_cmd(&*yt_path);
     cmd.args(yt_dlp_extra());
     if !cookie_file.is_empty() {
         cmd.args(["--cookies", &cookie_file]);
@@ -494,12 +538,12 @@ async fn fetch_single_video(
     path_state: State<'_, YtDlpPath>,
 ) -> Result<VideoInfo, String> {
     let yt_path = path_state.0.lock().await;
-    let mut cmd = Command::new(&*yt_path);
+    let mut cmd = new_cmd(&*yt_path);
     cmd.args(yt_dlp_extra());
     if !cookie_file.is_empty() {
         cmd.args(["--cookies", &cookie_file]);
     }
-    cmd.args(["--dump-json"]).arg(&url);
+    cmd.args(["--dump-single-json", "--no-playlist"]).arg(&url);
     if let Some(ref p) = proxy {
         cmd.args(["--proxy", p]);
     }
@@ -620,7 +664,7 @@ async fn start_download(
 
         // Download comments (if enabled)
         if settings.include_comments {
-        let mut comment_cmd = Command::new(&yt_path);
+        let mut comment_cmd = new_cmd(&yt_path);
         comment_cmd
             .args(yt_dlp_extra());
         if !settings.cookie_file.is_empty() {
@@ -630,7 +674,7 @@ async fn start_download(
             comment_cmd.args(["--proxy", p]);
         }
         comment_cmd
-            .args(["--write-comments", "--skip-download", "--no-warnings"])
+            .args(["--write-comments", "--skip-download", "--no-warnings", "--force-ipv4"])
             .arg("-o")
             .arg(video_dir.join("video.%(ext)s").to_string_lossy().as_ref())
             .arg(&video_url);
@@ -659,7 +703,7 @@ async fn start_download(
 
         // Download video
         {
-            let mut video_cmd = Command::new(&yt_path);
+            let mut video_cmd = new_cmd(&yt_path);
             video_cmd
                 .args(yt_dlp_extra());
             if !settings.cookie_file.is_empty() {
@@ -669,7 +713,8 @@ async fn start_download(
                 .args(["-f", &fmt])
                 .arg("-o")
                 .arg(video_dir.join("video.%(ext)s").to_string_lossy().as_ref())
-                .args(["--no-overwrites", "--continue", "--no-warnings"])
+                .args(["--no-overwrites", "--continue", "--no-warnings", "--force-ipv4"])
+                .args(["--retries", "20", "--fragment-retries", "20"])
                 .args(["--concurrent-fragments", "4", "--progress"]);
 
             // Format-specific args
@@ -725,12 +770,9 @@ async fn start_download(
                     } else {
                         "Failed"
                     };
-                    let msg: String = stderr.chars().take(300).collect();
-                    app.emit(
-                        "download-log",
-                        format!("  -> {} | {}", err, msg),
-                    )
-                    .ok();
+                    for line in stderr.lines().take(40) {
+                        app.emit("download-log", format!("  | {}", line)).ok();
+                    }
                     if err == "Cookie expired" || err == "Members only" {
                         app.emit("download-log", "  Hint: Your cookies may have expired. Please re-export from browser and paste again.".to_string()).ok();
                     }

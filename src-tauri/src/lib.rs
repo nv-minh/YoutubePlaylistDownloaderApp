@@ -34,8 +34,11 @@ pub struct DownloadSettings {
     cookie_file: String,
     output_dir: String,
     quality: String,
+    format: String,
     proxy: Option<String>,
     comments_only: bool,
+    auto_tag: bool,
+    selected_indices: Vec<usize>,
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -49,14 +52,30 @@ fn yt_dlp_extra() -> Vec<String> {
     ]
 }
 
-fn quality_format(quality: &str) -> String {
-    match quality {
-        "1080p" => "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b".into(),
-        "720p" => "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b".into(),
-        "480p" => "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b".into(),
-        "Audio only" => "ba/b".into(),
-        _ => "bv*+ba/b".into(),
+fn quality_format(quality: &str, format: &str) -> String {
+    match format {
+        "mp3" | "flac" | "wav" | "ogg" | "m4a" => "ba/b".into(),
+        _ => match quality {
+            "1080p" => "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b".into(),
+            "720p" => "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b".into(),
+            "480p" => "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b".into(),
+            _ => "bv*+ba/b".into(),
+        },
     }
+}
+
+fn parse_title_metadata(title: &str) -> (String, String, String) {
+    // Try "Artist - Title" pattern
+    if let Some(pos) = title.find(" - ") {
+        let artist = title[..pos].trim().to_string();
+        let rest = title[pos + 3..].trim();
+        // Remove common suffixes like (Official Video), [MV], etc.
+        let re = regex::Regex::new(r#"(?i)\s*[\(\[{].*?(official|video|mv|music|lyric|audio|4k|hd|1080p).*?[\)\]}]"#).unwrap();
+        let clean_title = re.replace_all(rest, "").trim().to_string();
+        let genre = String::new();
+        return (artist, clean_title, genre);
+    }
+    (String::new(), title.to_string(), String::new())
 }
 
 fn sanitize_folder_name(name: &str) -> String {
@@ -144,9 +163,11 @@ async fn fetch_playlist(
 
     let yt_path = path_state.0.lock().await;
     let mut cmd = Command::new(&*yt_path);
-    cmd.args(yt_dlp_extra())
-        .args(["--cookies", &cookie_file])
-        .args(["--dump-json", "--flat-playlist"])
+    cmd.args(yt_dlp_extra());
+    if !cookie_file.is_empty() {
+        cmd.args(["--cookies", &cookie_file]);
+    }
+    cmd.args(["--dump-json", "--flat-playlist"])
         .arg(&playlist_url);
 
     if let Some(ref p) = proxy {
@@ -204,7 +225,7 @@ async fn start_download(
     cancel.0.store(false, Ordering::SeqCst);
 
     let yt_path = path_state.0.lock().await.clone();
-    let fmt = quality_format(&settings.quality);
+    let fmt = quality_format(&settings.quality, &settings.format);
     let base_dir = PathBuf::from(&settings.output_dir);
     fs::create_dir_all(&base_dir).map_err(|e| e.to_string())?;
 
@@ -233,7 +254,17 @@ async fn start_download(
     )
     .ok();
 
+    let selected: Vec<usize> = if settings.selected_indices.is_empty() {
+        (0..result.videos.len()).collect()
+    } else {
+        settings.selected_indices.clone()
+    };
+
     for (i, video) in result.videos.iter().enumerate() {
+        if !selected.contains(&i) {
+            app.emit("download-status", (i + 1, "Skipped".to_string())).ok();
+            continue;
+        }
         if cancel.0.load(Ordering::SeqCst) {
             app.emit("download-log", "Cancelled.".to_string()).ok();
             break;
@@ -261,8 +292,11 @@ async fn start_download(
         // Download comments
         let mut comment_cmd = Command::new(&yt_path);
         comment_cmd
-            .args(yt_dlp_extra())
-            .args(["--cookies", &settings.cookie_file])
+            .args(yt_dlp_extra());
+        if !settings.cookie_file.is_empty() {
+            comment_cmd.args(["--cookies", &settings.cookie_file]);
+        }
+        comment_cmd
             .args(["--write-comments", "--skip-download", "--no-warnings"])
             .arg("-o")
             .arg(video_dir.join("video.%(ext)s").to_string_lossy().as_ref())
@@ -299,30 +333,46 @@ async fn start_download(
         if !settings.comments_only {
             let mut video_cmd = Command::new(&yt_path);
             video_cmd
-                .args(yt_dlp_extra())
-                .args(["--cookies", &settings.cookie_file])
+                .args(yt_dlp_extra());
+            if !settings.cookie_file.is_empty() {
+                video_cmd.args(["--cookies", &settings.cookie_file]);
+            }
+            video_cmd
                 .args(["-f", &fmt])
-                .args(["--merge-output-format", "mp4"])
                 .arg("-o")
                 .arg(video_dir.join("video.%(ext)s").to_string_lossy().as_ref())
                 .args(["--no-overwrites", "--continue", "--no-warnings"])
-                .args(["--concurrent-fragments", "4", "--progress"])
-                .arg(&video_url);
+                .args(["--concurrent-fragments", "4", "--progress"]);
+
+            // Format-specific args
+            let is_audio = matches!(settings.format.as_str(), "mp3" | "flac" | "wav" | "ogg" | "m4a");
+            if is_audio {
+                video_cmd.args(["--extract-audio", "--audio-format", &settings.format]);
+            } else if settings.format != "mp4" {
+                video_cmd.args(["--merge-output-format", &settings.format]);
+            } else {
+                video_cmd.args(["--merge-output-format", "mp4"]);
+            }
+
+            // Auto-tagging
+            if settings.auto_tag && is_audio {
+                let (artist, title, _genre) = parse_title_metadata(&video.title);
+                if !artist.is_empty() {
+                    video_cmd.args([
+                        "--parse-metadata", &format!("title:{}", title),
+                        "--parse-metadata", &format!("artist:{}", artist),
+                    ]);
+                }
+            }
+
+            video_cmd.arg(&video_url);
 
             if let Some(ref p) = settings.proxy {
                 video_cmd.args(["--proxy", p]);
             }
 
-            if settings.quality == "Audio only" {
-                video_cmd.args(["--extract-audio", "--audio-format", "mp3"]);
-            }
-
             if let Ok(output) = video_cmd.output().await {
-                let ext = if settings.quality == "Audio only" {
-                    "mp3"
-                } else {
-                    "mp4"
-                };
+                let ext = &settings.format;
                 let video_path = video_dir.join(format!("video.{}", ext));
                 if output.status.success() && video_path.exists() {
                     let size_mb = video_path.metadata().map(|m| m.len()).unwrap_or(0) as f64
@@ -377,6 +427,15 @@ fn cancel_download(cancel: State<'_, CancelState>) {
 }
 
 #[tauri::command]
+fn save_cookie_text(text: String) -> Result<String, String> {
+    let temp_dir = std::env::temp_dir().join("yt-downloader-cookies");
+    fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+    let path = temp_dir.join("cookies.txt");
+    fs::write(&path, &text).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn open_folder(path: String) -> Result<(), String> {
     if cfg!(target_os = "macos") {
         std::process::Command::new("open")
@@ -414,6 +473,7 @@ pub fn run() {
             fetch_playlist,
             start_download,
             cancel_download,
+            save_cookie_text,
             open_folder,
         ])
         .run(tauri::generate_context!())

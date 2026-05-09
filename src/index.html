@@ -4,78 +4,133 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>YT Playlist Downloader</title>
+    <title>YouTube Playlist Downloader</title>
     <script type="module" src="/main.js" defer></script>
   </head>
   <body>
     <div class="app">
       <!-- Header -->
       <div class="header">
-        <h1>YT Playlist Downloader</h1>
-        <span class="ytdlp-status" id="ytdlp-status">Checking yt-dlp...</span>
+        <h1 data-i18n="appTitle">YouTube Playlist Downloader</h1>
+        <div class="header-right">
+          <select class="lang-select" id="lang">
+            <option value="vi" selected>Tiếng Việt</option>
+            <option value="en">English</option>
+            <option value="ar">العربية</option>
+            <option value="zh">中文</option>
+            <option value="nl">Nederlands</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="he">עברית</option>
+            <option value="it">Italiano</option>
+            <option value="pl">Polski</option>
+            <option value="pt">Português (BR)</option>
+            <option value="ro">Română</option>
+            <option value="ru">Русский</option>
+            <option value="es">Español</option>
+            <option value="tr">Türkçe</option>
+          </select>
+          <span class="ytdlp-status" id="ytdlp-status">Checking yt-dlp...</span>
+        </div>
       </div>
 
       <!-- Settings -->
       <div class="settings">
         <div class="field">
-          <label>Playlist URL</label>
-          <input type="text" id="url" placeholder="Paste YouTube playlist or video URL..." />
+          <label data-i18n="playlistUrl">Playlist URL</label>
+          <input type="text" id="url" data-i18n-placeholder="urlPlaceholder" />
+        </div>
+
+        <!-- Access Type Tabs -->
+        <div class="field">
+          <label data-i18n="accessType">Access Type</label>
+          <div class="tabs">
+            <button class="tab active" id="tab-public" data-tab="public" data-i18n="tabPublic">Public</button>
+            <button class="tab" id="tab-private" data-tab="private" data-i18n="tabPrivate">Private / Members-only</button>
+          </div>
+        </div>
+
+        <div class="tab-content active" id="content-public">
+          <div class="hint" data-i18n="publicHint">Public playlists don't require cookies.</div>
+        </div>
+
+        <div class="tab-content" id="content-private">
+          <div class="cookie-steps">
+            <div class="step">
+              <span class="step-num">1</span>
+              <span data-i18n="cookieStep1">Install <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" class="link">Get cookies.txt LOCALLY</a> extension</span>
+            </div>
+            <div class="step">
+              <span class="step-num">2</span>
+              <span data-i18n="cookieStep2">Open <a href="https://www.youtube.com" target="_blank" class="link">youtube.com</a> and log in</span>
+            </div>
+            <div class="step">
+              <span class="step-num">3</span>
+              <span data-i18n="cookieStep3">Click the extension icon, then click <strong>Export</strong></span>
+            </div>
+            <div class="step">
+              <span class="step-num">4</span>
+              <span data-i18n="cookieStep4">Copy all content and paste below</span>
+            </div>
+          </div>
+          <textarea id="cookie-text" data-i18n-placeholder="cookiePlaceholder" rows="5"></textarea>
         </div>
 
         <div class="field">
-          <label>Cookie File</label>
+          <label data-i18n="saveTo">Save To</label>
           <div class="row-input">
-            <input type="text" id="cookie" placeholder="cookies.txt" value="cookies.txt" />
-            <button class="btn-browse" id="btn-cookie">Browse</button>
+            <input type="text" id="output" data-i18n-placeholder="outputPlaceholder" />
+            <button class="btn-browse" id="btn-output" data-i18n="browse">Browse</button>
           </div>
         </div>
 
         <div class="field">
-          <label>Save To</label>
-          <div class="row-input">
-            <input type="text" id="output" placeholder="Select output folder..." />
-            <button class="btn-browse" id="btn-output">Browse</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label>Video Quality</label>
+          <label data-i18n="videoQuality">Video Quality</label>
           <select id="quality">
             <option value="Best">Best</option>
             <option value="1080p">1080p</option>
             <option value="720p">720p</option>
             <option value="480p">480p</option>
-            <option value="Audio only">Audio only</option>
           </select>
         </div>
 
         <div class="field">
-          <label>Proxy (optional)</label>
+          <label data-i18n="outputFormat">Output Format</label>
+          <select id="format">
+            <option value="mp4">MP4</option>
+            <option value="mp3">MP3</option>
+            <option value="webm">WebM</option>
+            <option value="mkv">MKV</option>
+            <option value="avi">AVI</option>
+            <option value="flac">FLAC</option>
+            <option value="wav">WAV</option>
+            <option value="ogg">OGG</option>
+            <option value="m4a">M4A</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label data-i18n="proxy">Proxy (optional)</label>
           <input type="text" id="proxy" placeholder="socks5://127.0.0.1:1080" />
         </div>
 
         <label class="checkbox-row">
-          <input type="checkbox" id="comments-only" />
-          Comments only (skip video download)
+          <input type="checkbox" id="auto-tag" checked />
+          <span data-i18n="autoTag">Auto-tag (artist, title, genre)</span>
         </label>
 
-        <div class="field">
-          <label>Concurrent Downloads</label>
-          <select id="concurrent">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-          </select>
-        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" id="comments-only" />
+          <span data-i18n="commentsOnly">Comments only (skip video)</span>
+        </label>
 
-        <button class="btn-start" id="btn-start">Start Download</button>
-        <button class="btn-stop" id="btn-stop" disabled>Stop</button>
+        <button class="btn-start" id="btn-start" data-i18n="startDownload">Start Download</button>
+        <button class="btn-stop" id="btn-stop" disabled data-i18n="stop">Stop</button>
       </div>
 
       <!-- Queue -->
       <div class="queue" id="queue">
-        <div class="queue-empty">Paste a playlist URL and click Start</div>
+        <div class="queue-empty" data-i18n="queueEmpty">Paste a playlist URL and click Start</div>
       </div>
 
       <!-- Log -->
@@ -87,7 +142,7 @@
           <div class="fill" id="progress-fill"></div>
         </div>
         <span class="stats" id="stats"></span>
-        <button class="btn-folder" id="btn-folder" disabled>Open Folder</button>
+        <button class="btn-folder" id="btn-folder" disabled data-i18n="openFolder">Open Folder</button>
       </div>
     </div>
   </body>

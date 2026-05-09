@@ -31,39 +31,64 @@ static RE_PROGRESS: LazyLock<regex::Regex> = LazyLock::new(|| {
 // ── Environment ────────────────────────────────────────────────────────
 
 fn setup_env(cmd: &mut Command) {
-    // Ensure node is findable when launched from Finder/Dock
-    let home = std::env::var("HOME").unwrap_or_default();
+    let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
 
-    // Detect all nvm node versions
-    let mut nvm_paths: Vec<String> = vec![];
-    let nvm_dir = PathBuf::from(format!("{}/.nvm/versions/node", home));
-    if let Ok(entries) = fs::read_dir(&nvm_dir) {
-        for entry in entries.flatten() {
-            if entry.path().join("bin/node").exists() {
-                nvm_paths.push(entry.path().join("bin").to_string_lossy().to_string());
+    let mut paths: Vec<String> = vec![];
+
+    if cfg!(target_os = "windows") {
+        // Windows: common install locations
+        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        let program_files = std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into());
+        let program_files_x86 = std::env::var("ProgramFiles(x86)").unwrap_or_else(|_| r"C:\Program Files (x86)".into());
+
+        if !local_app_data.is_empty() {
+            paths.push(format!("{}\\Programs\\Python", local_app_data));
+            paths.push(format!("{}\\Programs\\Python\\Python311", local_app_data));
+            paths.push(format!("{}\\Programs\\Python\\Python310", local_app_data));
+            paths.push(format!("{}\\Programs\\Python\\Python39", local_app_data));
+        }
+        paths.push(format!("{}\\Python311", program_files));
+        paths.push(format!("{}\\Python310", program_files));
+        paths.push(format!("{}\\Python39", program_files));
+        paths.push(format!("{}\\Python311", program_files_x86));
+        // App data dir for yt-dlp.exe downloaded by our app
+        let app_data = std::env::var("APPDATA").unwrap_or_default();
+        if !app_data.is_empty() {
+            paths.push(format!("{}\\yt-playlist-downloader", app_data));
+        }
+    } else {
+        // macOS / Linux
+        let mut nvm_paths: Vec<String> = vec![];
+        let nvm_dir = PathBuf::from(format!("{}/.nvm/versions/node", home));
+        if let Ok(entries) = fs::read_dir(&nvm_dir) {
+            for entry in entries.flatten() {
+                if entry.path().join("bin/node").exists() {
+                    nvm_paths.push(entry.path().join("bin").to_string_lossy().to_string());
+                }
             }
         }
+        if nvm_paths.is_empty() {
+            nvm_paths.push(format!("{}/.nvm/versions/node/v20.14.0/bin", home));
+        }
+        paths.extend(nvm_paths);
+        paths.push(format!("{}/.cargo/bin", home));
+        paths.push("/usr/local/bin".into());
+        paths.push("/opt/homebrew/bin".into());
+        paths.push("/usr/bin".into());
     }
-    // Fallback hardcoded path
-    if nvm_paths.is_empty() {
-        nvm_paths.push(format!("{}/.nvm/versions/node/v20.14.0/bin", home));
-    }
-
-    let mut paths: Vec<String> = nvm_paths;
-    paths.push(format!("{}/.cargo/bin", home));
-    paths.push("/usr/local/bin".into());
-    paths.push("/opt/homebrew/bin".into());
-    paths.push("/usr/bin".into());
 
     if let Ok(existing) = std::env::var("PATH") {
-        for p in existing.split(':') {
+        for p in existing.split(sep) {
             let s = p.to_string();
             if !paths.contains(&s) {
                 paths.push(s);
             }
         }
     }
-    cmd.env("PATH", paths.join(":"));
+    cmd.env("PATH", paths.join(sep));
 }
 
 fn new_cmd(program: &str) -> Command {
@@ -647,28 +672,69 @@ async fn check_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, String>
 
 #[tauri::command]
 async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, String> {
-    let python = if cfg!(target_os = "windows") {
-        "python"
-    } else {
-        "python3"
-    };
-    let output = new_cmd(python)
-        .args(["-m", "pip", "install", "--upgrade", "yt-dlp"])
-        .output()
-        .await
-        .map_err(|e| format!("pip failed: {}", e))?;
-    if output.status.success() {
-        let path = path_state.0.lock().await;
-        let version_output = new_cmd(&*path)
+    if cfg!(target_os = "windows") {
+        // Windows: download yt-dlp.exe directly from GitHub releases
+        let app_data = std::env::var("APPDATA").unwrap_or_else(|_| {
+            format!("C:\\Users\\{}\\AppData\\Roaming",
+                std::env::var("USERNAME").unwrap_or_default())
+        });
+        let dir = PathBuf::from(&app_data).join("yt-playlist-downloader");
+        fs::create_dir_all(&dir).map_err(|e| format!("Cannot create dir: {}", e))?;
+        let exe_path = dir.join("yt-dlp.exe");
+        let url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
+
+        // Try curl first, then PowerShell as fallback
+        let curl_ok = new_cmd("curl")
+            .args(["-sL", url, "-o"])
+            .arg(&exe_path)
+            .output()
+            .await
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        if !curl_ok || !exe_path.exists() {
+            let ps_ok = new_cmd("powershell")
+                .args(["-NoProfile", "-Command",
+                    &format!("Invoke-WebRequest -Uri '{}' -OutFile '{}'", url, exe_path.to_string_lossy())])
+                .output()
+                .await
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if !ps_ok || !exe_path.exists() {
+                return Err("Failed to download yt-dlp.exe. Please install manually from https://github.com/yt-dlp/yt-dlp".into());
+            }
+        }
+
+        // Update path to point to downloaded exe
+        let new_path = exe_path.to_string_lossy().to_string();
+        *path_state.0.lock().await = new_path.clone();
+
+        // Verify
+        let version_output = new_cmd(&new_path)
             .arg("--version")
             .output()
             .await
             .map_err(|e| format!("yt-dlp version check failed: {}", e))?;
-        Ok(String::from_utf8_lossy(&version_output.stdout)
-            .trim()
-            .to_string())
+        Ok(String::from_utf8_lossy(&version_output.stdout).trim().to_string())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+        // macOS / Linux: use pip
+        let python = "python3";
+        let output = new_cmd(python)
+            .args(["-m", "pip", "install", "--upgrade", "yt-dlp"])
+            .output()
+            .await
+            .map_err(|e| format!("pip failed: {}", e))?;
+        if output.status.success() {
+            let path = path_state.0.lock().await;
+            let version_output = new_cmd(&*path)
+                .arg("--version")
+                .output()
+                .await
+                .map_err(|e| format!("yt-dlp version check failed: {}", e))?;
+            Ok(String::from_utf8_lossy(&version_output.stdout).trim().to_string())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
+        }
     }
 }
 
@@ -973,6 +1039,11 @@ async fn start_download(
                 .arg(video_dir.join("video.%(ext)s").to_string_lossy().as_ref())
                 .args(["--no-overwrites", "--continue", "--no-warnings", "--force-ipv4"])
                 .args(["--retries", "20", "--fragment-retries", "20"])
+                .args(["--socket-timeout", "30", "--throttled-rate", "100K"])
+                .args(["--file-access-retries", "10", "--retry-sleep", "5"])
+                .args(["--buffer-size", "16K", "--sleep-requests", "1"])
+                .args(["--extractor-retries", "5"])
+                .arg("--no-abort-on-unavailable-fragment")
                 .args(["--concurrent-fragments", "4", "--progress"]);
 
             // Format-specific args

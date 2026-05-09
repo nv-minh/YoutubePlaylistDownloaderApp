@@ -89,6 +89,9 @@ fn setup_env(cmd: &mut Command) {
         }
     }
     cmd.env("PATH", paths.join(sep));
+    if cfg!(target_os = "windows") {
+        cmd.env("PYTHONUTF8", "1");
+    }
 }
 
 fn new_cmd(program: &str) -> Command {
@@ -447,9 +450,10 @@ fn parse_title_metadata(title: &str) -> (String, String, String) {
 
 fn sanitize_folder_name(name: &str) -> String {
     let cleaned = RE_SANITIZE_FOLDER.replace_all(name, "").to_string();
-    let trimmed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
-    let chars: Vec<char> = trimmed.chars().collect();
-    if chars.len() > 200 {
+    // Strip non-ASCII characters (Vietnamese diacritics cause cp1252 errors on Windows)
+    let ascii: String = cleaned.chars().filter(|c| c.is_ascii()).collect();
+    let trimmed = ascii.split_whitespace().collect::<Vec<_>>().join(" ");
+    if trimmed.len() > 200 {
         trimmed[..200].to_string()
     } else {
         trimmed
@@ -1038,12 +1042,11 @@ async fn start_download(
                 .arg("-o")
                 .arg(video_dir.join("video.%(ext)s").to_string_lossy().as_ref())
                 .args(["--no-overwrites", "--continue", "--no-warnings", "--force-ipv4"])
-                .args(["--retries", "20", "--fragment-retries", "20"])
+                .args(["--retries", "10", "--fragment-retries", "10"])
                 .args(["--socket-timeout", "30", "--throttled-rate", "100K"])
-                .args(["--file-access-retries", "10", "--retry-sleep", "5"])
-                .args(["--buffer-size", "16K", "--sleep-requests", "1"])
-                .args(["--extractor-retries", "5"])
-                .arg("--no-abort-on-unavailable-fragment")
+                .args(["--file-access-retries", "5", "--retry-sleep", "3"])
+                .args(["--buffer-size", "16K"])
+                .args(["--extractor-retries", "3"])
                 .args(["--concurrent-fragments", "4", "--progress"]);
 
             // Format-specific args
@@ -1096,20 +1099,34 @@ async fn start_download(
                 let stderr_handle = child.stderr.take();
                 let progress_re = &*RE_PROGRESS;
 
-                // Parse progress from stdout
-                if let Some(stdout) = stdout {
-                    let reader = BufReader::new(stdout);
-                    let mut lines = reader.lines();
-                    while let Ok(Some(line)) = lines.next_line().await {
-                        if let Some(caps) = progress_re.captures(&line) {
-                            let pct = &caps[1];
-                            app.emit("download-status", (idx, format!("downloading {}%", pct))).ok();
+                // Parse progress from stdout with 10-minute timeout
+                let download_result = tokio::time::timeout(
+                    std::time::Duration::from_secs(600),
+                    async {
+                        if let Some(stdout) = stdout {
+                            let reader = BufReader::new(stdout);
+                            let mut lines = reader.lines();
+                            while let Ok(Some(line)) = lines.next_line().await {
+                                if let Some(caps) = progress_re.captures(&line) {
+                                    let pct = &caps[1];
+                                    app.emit("download-status", (idx, format!("downloading {}%", pct))).ok();
+                                }
+                            }
                         }
+                        child.wait().await
                     }
-                }
+                ).await;
 
-                // Wait for process to finish
-                let exit_status = child.wait().await;
+                let exit_status = match download_result {
+                    Ok(status) => status,
+                    Err(_) => {
+                        // Timeout — kill the process
+                        app.emit("download-log", format!("  -> Timeout (10 min), killing process")).ok();
+                        let _ = child.kill().await;
+                        app.emit("download-status", (idx, "Failed".to_string())).ok();
+                        continue;
+                    }
+                };
 
                 // Read stderr for error messages
                 let mut stderr_buf = String::new();

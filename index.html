@@ -2,17 +2,23 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>YouTube Playlist Downloader</title>
-    <script type="module" src="/main.js" defer></script>
+    <title>OmniGrab</title>
+    <script type="module" src="/src/main.ts" defer></script>
   </head>
   <body>
     <div class="app">
       <!-- Header -->
       <div class="header">
-        <h1 data-i18n="appTitle">YouTube Playlist Downloader</h1>
+        <h1 data-i18n="appTitle">OmniGrab</h1>
         <div class="header-right">
+          <button class="theme-toggle" id="theme-toggle" title="Toggle theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+            </svg>
+          </button>
           <select class="lang-select" id="lang">
             <option value="vi" selected>Tiếng Việt</option>
             <option value="en">English</option>
@@ -42,6 +48,7 @@
           <div class="tabs">
             <button class="tab active" data-mode="playlist" data-i18n="tabPlaylist">Playlist</button>
             <button class="tab" data-mode="video" data-i18n="tabVideo">1 Video</button>
+            <button class="tab" data-mode="tiktok" data-i18n="tabTiktok">TikTok</button>
           </div>
         </div>
 
@@ -57,8 +64,21 @@
             <input type="text" id="url-video" data-i18n-placeholder="videoUrlPlaceholder" />
           </div>
         </div>
+        <div class="mode-content" id="mode-tiktok">
+          <div class="field">
+            <label data-i18n="tiktokUrl">TikTok URL</label>
+            <input type="text" id="url-tiktok" data-i18n-placeholder="tiktokUrlPlaceholder" />
+          </div>
+          <div class="tiktok-options">
+            <label class="checkbox-row">
+              <input type="checkbox" id="no-watermark" checked />
+              <span data-i18n="noWatermark">Download without watermark</span>
+            </label>
+          </div>
+        </div>
 
         <!-- Access Type Tabs -->
+        <div class="yt-only">
         <div class="field">
           <label data-i18n="accessType">Access Type</label>
           <div class="tabs">
@@ -91,6 +111,7 @@
             </div>
           </div>
           <textarea id="cookie-text" data-i18n-placeholder="cookiePlaceholder" rows="5"></textarea>
+        </div>
         </div>
 
         <div class="field">
@@ -131,14 +152,23 @@
           <input type="text" id="proxy" placeholder="socks5://127.0.0.1:1080" />
         </div>
 
-        <label class="checkbox-row">
-          <input type="checkbox" id="auto-tag" checked />
-          <span data-i18n="autoTag">Auto-tag (artist, title, genre)</span>
-        </label>
+        <div class="field">
+          <label data-i18n="parallelDownloads">Parallel downloads</label>
+          <div class="slider-row">
+            <input type="range" id="max-concurrent" min="1" max="5" value="3" />
+            <span class="slider-val" id="max-concurrent-val">3</span>
+          </div>
+        </div>
 
+        <div class="yt-only">
         <label class="checkbox-row">
           <input type="checkbox" id="comments-only" checked />
           <span data-i18n="commentsOnly">Include comments</span>
+        </label>
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="auto-tag" checked />
+          <span data-i18n="autoTag">Auto-tag (artist, title, genre)</span>
         </label>
 
         <label class="checkbox-row">
@@ -157,7 +187,7 @@
         </label>
 
         <div class="field">
-          <label data-i18n="exportComments">Export comments</label>
+          <label data-i18n="exportComments" class="field-export-comment">Export comments</label>
           <select id="export-comments">
             <option value="" data-i18n="exportNone">None</option>
             <option value="json">JSON</option>
@@ -167,7 +197,7 @@
 
         <label class="checkbox-row">
           <input type="checkbox" id="download-subs" />
-          <span data-i18n="downloadSubs">Download subtitles</span>
+          <span data-i18n="downloadSubs" >Download subtitles</span>
         </label>
 
         <label class="checkbox-row">
@@ -202,6 +232,7 @@
           <div class="field sub-custom" id="sub-custom" style="display:none">
             <input type="text" id="sub-langs" value="en,vi" placeholder="en,vi,ja,ko..." />
           </div>
+        </div>
         </div>
 
         <button class="btn-start" id="btn-start" data-i18n="startDownload">Start Download</button>

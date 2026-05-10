@@ -1,0 +1,121 @@
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { applyTranslations } from "./i18n";
+import {
+  $url, $urlVideo, $urlTiktok, $output, $downloadSubs, $subLangSelect,
+  $subCustom, $subOptions, $start, $stop, $folder, $log,
+  $progressFill, $stats, $queue, $lang,
+  $noWatermark, $maxConcurrent, $maxConcurrentVal, $themeToggle,
+  outputDir, actualDir, playlistVideos, failedIndices,
+  setOutputDir, setActualDir, setPlaylistVideos, setFailedIndices, setAccessType, setDownloadMode,
+} from "./dom";
+import { checkYtdlp, startDownload, redownloadFailed, setupEventListeners } from "./download";
+import { t } from "./i18n";
+import { appendLog } from "./ui";
+
+// ── Language switch ────────────────────────────────────────────────────
+$lang.addEventListener("change", () => applyTranslations());
+
+// ── Theme toggle ──────────────────────────────────────────────────────
+const savedTheme = localStorage.getItem("theme") || "dark";
+document.documentElement.setAttribute("data-theme", savedTheme);
+$themeToggle.addEventListener("click", () => {
+  const current = document.documentElement.getAttribute("data-theme") || "dark";
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("theme", next);
+});
+
+// ── Parallel downloads slider ─────────────────────────────────────────
+$maxConcurrent.addEventListener("input", () => {
+  $maxConcurrentVal.textContent = $maxConcurrent.value;
+});
+
+// ── Subtitle toggle ────────────────────────────────────────────────────
+$downloadSubs.addEventListener("change", () => {
+  $subOptions.style.display = $downloadSubs.checked ? "block" : "none";
+});
+
+$subLangSelect.addEventListener("change", () => {
+  $subCustom.style.display = $subLangSelect.value === "custom" ? "block" : "none";
+});
+
+// ── Access tab switching ───────────────────────────────────────────────
+document.querySelectorAll<HTMLElement>(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const group = tab.closest<HTMLElement>(".tabs")!;
+    group.querySelectorAll<HTMLElement>(".tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    if (tab.dataset.tab) {
+      setAccessType(tab.dataset.tab as "public" | "private");
+      document.querySelectorAll<HTMLElement>(".tab-content").forEach((c) => {
+        if (c.id.startsWith("content-")) c.classList.remove("active");
+      });
+      document.getElementById(`content-${tab.dataset.tab}`)!.classList.add("active");
+    }
+    if (tab.dataset.mode) {
+      setDownloadMode(tab.dataset.mode as "playlist" | "video" | "tiktok");
+      document.querySelectorAll<HTMLElement>(".mode-content").forEach((c) => c.classList.remove("active"));
+      document.getElementById(`mode-${tab.dataset.mode}`)!.classList.add("active");
+      const isTiktok = tab.dataset.mode === "tiktok";
+      document.querySelectorAll<HTMLElement>(".yt-only").forEach((el) => {
+        el.style.display = isTiktok ? "none" : "";
+      });
+      // Reset button label and queue on mode switch
+      $start.textContent = tab.dataset.mode === "video" ? t("startDownload") : t("fetchInfo");
+      $start.disabled = false;
+      setPlaylistVideos([]);
+      setFailedIndices([]);
+      $queue.innerHTML = `<div class="queue-empty" data-i18n="queueEmpty">${t("queueEmpty")}</div>`;
+    }
+  });
+});
+
+// ── Folder picker ──────────────────────────────────────────────────────
+document.getElementById("btn-output")!.addEventListener("click", async () => {
+  const selected = await open({ directory: true });
+  if (selected) { $output.value = selected; setOutputDir(selected); }
+});
+
+// ── Clear ──────────────────────────────────────────────────────────────
+document.getElementById("btn-clear")!.addEventListener("click", () => {
+  setPlaylistVideos([]);
+  setFailedIndices([]);
+  setActualDir("");
+  $url.value = "";
+  $urlVideo.value = "";
+  $log.innerHTML = "";
+  $progressFill.style.width = "0%";
+  $stats.textContent = "";
+  $start.disabled = false;
+  $start.textContent = t("fetchInfo");
+  $stop.disabled = true;
+  $folder.disabled = true;
+  const $redownload = document.getElementById("btn-redownload");
+  if ($redownload) $redownload.style.display = "none";
+  $queue.innerHTML = `<div class="queue-empty" data-i18n="queueEmpty">${t("queueEmpty")}</div>`;
+});
+
+// ── Start / Stop / Folder / Redownload ─────────────────────────────────
+$start.addEventListener("click", startDownload);
+
+$stop.addEventListener("click", () => {
+  invoke("cancel_download");
+  $stop.disabled = true;
+  appendLog("Cancelling...");
+});
+
+$folder.addEventListener("click", () => {
+  const dir = actualDir || outputDir;
+  if (dir) invoke("open_folder", { path: dir });
+});
+
+document.getElementById("btn-redownload")!.addEventListener("click", redownloadFailed);
+
+// ── Init ───────────────────────────────────────────────────────────────
+window.addEventListener("DOMContentLoaded", () => {
+  applyTranslations();
+  checkYtdlp();
+  setupEventListeners();
+  $start.textContent = t("fetchInfo");
+});

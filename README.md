@@ -95,7 +95,15 @@
 #### ⚡ Hiệu năng
 - **Nhẹ (~4MB)** — So với ~150MB của ứng dụng Electron
 - **Tauri 2.0 + Rust** — Backend nhanh, an toàn, tiết kiệm RAM
-- **Cross-platform** — macOS (Apple Silicon + Intel) & Windows
+- **Cross-platform** — macOS (Apple Silicon + Intel), Windows, Linux (Ubuntu)
+
+</td></tr>
+<tr><td>
+
+#### 🔒 Bảo mật
+- **Cookie chỉ lưu locally** — Không gửi cookie đến bất kỳ server nào ngoài YouTube/TikTok
+- **Cookie tự xoá** — Cookie file bị xoá sau khi tải xong
+- **Mã nguồn mở** — Toàn bộ code có thể audit
 
 </td></tr>
 </table>
@@ -111,8 +119,26 @@ Vào [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/releases
 | **macOS Apple Silicon** (M1/M2/M3/M4) | `OmniGrab_*_aarch64.dmg` |
 | **macOS Intel** | `OmniGrab_*_x64.dmg` |
 | **Windows** | `OmniGrab_*_x64-setup.exe` |
+| **Ubuntu / Debian** | `OmniGrab_*_amd64.deb` |
 
-> **Lưu ý macOS**: Nếu gặp lỗi "Cannot be opened because it is from an unidentified developer", chuột phải → Open → Open.
+#### macOS — Xử lý lỗi "Unidentified Developer"
+1. Chuột phải (hoặc Control+Click) vào file `.dmg` → **Open**
+2. Nếu vẫn bị: **System Settings** → **Privacy & Security** → kéo xuống → bấm **Open Anyway**
+
+> Hoặc chạy lệnh: `xattr -cr /Applications/OmniGrab.app`
+
+#### Ubuntu / Debian
+```bash
+sudo dpkg -i OmniGrab_*_amd64.deb
+sudo apt-get install -f  # cài dependencies thiếu
+```
+
+#### Yêu cầu phụ thuộc
+- **yt-dlp** — Tự động cài khi mở app lần đầu
+- **FFmpeg** — Cần cho metadata injection, subtitle embedding, audio conversion. Tải tại [ffmpeg.org](https://ffmpeg.org/download.html) hoặc cài qua package manager:
+  - macOS: `brew install ffmpeg`
+  - Ubuntu: `sudo apt install ffmpeg`
+  - Windows: Tải từ [ffmpeg.org](https://ffmpeg.org/download.html) và thêm vào PATH
 
 ---
 
@@ -193,7 +219,8 @@ npm run tauri dev
 |-----------|-----------|
 | Frontend | TypeScript + Vite — Apple-inspired light/dark theme |
 | Backend | Rust (Tauri 2.0) |
-| Downloader | yt-dlp |
+| Downloader | yt-dlp (tự cài) |
+| Media | FFmpeg (cần cài riêng — xem hướng dẫn trên) |
 | Kích thước | ~4MB |
 
 ---
@@ -274,7 +301,15 @@ npm run tauri dev
 #### ⚡ Performance
 - **Lightweight (~4MB)** — Compared to ~150MB for Electron apps
 - **Tauri 2.0 + Rust** — Fast, safe, low memory backend
-- **Cross-platform** — macOS (Apple Silicon + Intel) & Windows
+- **Cross-platform** — macOS (Apple Silicon + Intel), Windows, Linux (Ubuntu)
+
+</td></tr>
+<tr><td>
+
+#### 🔒 Privacy & Security
+- **Cookies stored locally only** — Never sent to any server except YouTube/TikTok
+- **Auto-cleanup** — Cookie files deleted after download completes
+- **Open source** — Full code available for audit
 
 </td></tr>
 </table>
@@ -290,8 +325,26 @@ Go to [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/release
 | **macOS Apple Silicon** (M1/M2/M3/M4) | `OmniGrab_*_aarch64.dmg` |
 | **macOS Intel** | `OmniGrab_*_x64.dmg` |
 | **Windows** | `OmniGrab_*_x64-setup.exe` |
+| **Ubuntu / Debian** | `OmniGrab_*_amd64.deb` |
 
-> **macOS note**: If you see "Cannot be opened because it is from an unidentified developer", right-click → Open → Open.
+#### macOS — Fix "Unidentified Developer" Error
+1. Right-click (or Control+Click) the `.dmg` file → **Open**
+2. If still blocked: **System Settings** → **Privacy & Security** → scroll down → click **Open Anyway**
+
+> Or run: `xattr -cr /Applications/OmniGrab.app`
+
+#### Ubuntu / Debian
+```bash
+sudo dpkg -i OmniGrab_*_amd64.deb
+sudo apt-get install -f  # install missing dependencies
+```
+
+#### Dependencies
+- **yt-dlp** — Auto-installed on first launch
+- **FFmpeg** — Required for metadata injection, subtitle embedding, and audio conversion. Install via:
+  - macOS: `brew install ffmpeg`
+  - Ubuntu: `sudo apt install ffmpeg`
+  - Windows: Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH
 
 ---
 
@@ -372,7 +425,8 @@ npm run tauri dev
 |-----------|-----------|
 | Frontend | TypeScript + Vite — Apple-inspired light/dark theme |
 | Backend | Rust (Tauri 2.0) |
-| Downloader | yt-dlp |
+| Downloader | yt-dlp (auto-installed) |
+| Media | FFmpeg (install separately — see above) |
 | Size | ~4MB |
 
 ---

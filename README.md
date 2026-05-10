@@ -1,8 +1,8 @@
 <div align="center">
 
-# YouTube Playlist Downloader
+# OmniGrab
 
-### Tải xuống toàn bộ playlist YouTube chỉ với 1 cú click
+### Tải video YouTube, TikTok — Playlist, Channel, Video đơn — Chỉ với 1 click
 
 <img src="screenshot.png" width="720" alt="Screenshot" />
 
@@ -12,9 +12,9 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-orange.svg)]()
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-dea584.svg)]()
 
-**[Tiếng Việt](#-tính-năng) &nbsp;·&nbsp; [English](#-features)**
+**[Tiếng Việt](#-tính-năng) · [English](#-features)**
 
-[⬇️ Tải xuống](#-cài-đặt) &nbsp;·&nbsp; [Cách sử dụng](#-cách-sử-dụng) &nbsp;·&nbsp; [Build từ source](#-build-từ-source)
+[⬇️ Tải xuống](#-cài-đặt) · [Cách sử dụng](#-cách-sử-dụng) · [Build từ source](#-build-từ-source)
 
 </div>
 
@@ -28,16 +28,25 @@
 <tr><td>
 
 #### 🎬 Tải xuống video
-- **Playlist & Video đơn** — Tải cả playlist hoặc chỉ 1 video
+- **3 chế độ** — Playlist, Video đơn, TikTok
+- **YouTube Playlist** — Tải cả playlist hoặc channel (paste link `@username`)
+- **YouTube Channel** — Dán link `youtube.com/@username` để tải tất cả video
+- **TikTok** — Tải video từ user profile hoặc dán nhiều link. Hỗ trợ không watermark
 - **Giao diện thẻ (Card UI)** — Xem trước thumbnail, chọn/bỏ chọn từng video
-- **Chọn tất cả / Bỏ chọn tất cả** — Chọn nhanh video cần tải
-- **Xóa video khỏi hàng đợi** — Loại bỏ video không muốn tải
+- **Hai giai đoạn** — Bấm "Lấy thông tin" → xem cards → chọn → "Bắt đầu tải"
 - **9 định dạng** — MP4, MP3, WebM, MKV, AVI, FLAC, WAV, OGG, M4A
 - **4 mức chất lượng** — Best, 1080p, 720p, 480p
-- **Chế độ cập nhật** — Tự động bỏ qua video đã tải, chỉ tải video mới
-- **Flat Output** — Tải tất cả video vào 1 folder thay vì tạo subfolder riêng
-- **Khóa UI khi tải** — Chống thao tác nhầm khi đang download
-- **Theo dõi tiến trình** — Thanh tiến trình + phần trăm theo thời gian thực
+- **Chế độ cập nhật** — Tự động bỏ qua video đã tải
+- **Flat Output** — Tải tất cả vào 1 folder thay vì tạo subfolder riêng
+
+</td></tr>
+<tr><td>
+
+#### ⚡ Tải song song & Tiến trình
+- **Parallel downloads** — Tải 1–5 video đồng thời (tuỳ chỉnh)
+- **Real-time progress** — Hiển thị tốc độ, ETA, dung lượng mỗi video
+- **Thanh tiến trình** — Theo dõi tổng tiến trình + từng video riêng
+- **Auto-retry 503** — Tự thử lại khi server busy hoặc lỗi mạng
 
 </td></tr>
 <tr><td>
@@ -61,7 +70,6 @@
 #### 📝 Phụ đề (Subtitles)
 - **Tải phụ đề** — Tự động tải phụ đề kèm video
 - **Chọn ngôn ngữ** — 15+ ngôn ngữ phổ biến + tùy chỉnh
-- **Bao gồm phụ đề tự động** — Tự động tạo phụ đề nếu không có bản thủ công
 - **Nhúng vào video** — Phụ đề được nhúng trực tiếp vào MP4/WebM/MKV
 
 </td></tr>
@@ -76,9 +84,10 @@
 </td></tr>
 <tr><td>
 
-#### 🌍 Đa ngôn ngữ
+#### 🌗 Giao diện
+- **Light / Dark mode** — Chuyển đổi theme theo ý thích
+- **Apple-inspired design** — Giao diện tối/sáng phong cách Apple
 - **15 ngôn ngữ UI** — Tiếng Việt, English, العربية, 中文, Nederlands, Français, Deutsch, עברית, Italiano, Polski, Português (BR), Română, Русский, Español, Türkçe
-- Chuyển ngôn ngữ tức thì
 
 </td></tr>
 <tr><td>
@@ -86,8 +95,6 @@
 #### ⚡ Hiệu năng
 - **Nhẹ (~4MB)** — So với ~150MB của ứng dụng Electron
 - **Tauri 2.0 + Rust** — Backend nhanh, an toàn, tiết kiệm RAM
-- **Tải xuống song song** — 4 fragment đồng thời, 20 lần thử lại
-- **Auto-retry 503** — Tự thử lại khi server busy hoặc lỗi mạng
 - **Cross-platform** — macOS (Apple Silicon + Intel) & Windows
 
 </td></tr>
@@ -101,9 +108,9 @@ Vào [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/releases
 
 | Nền tảng | File |
 |----------|------|
-| **macOS Apple Silicon** (M1/M2/M3/M4) | `YouTube Playlist Downloader_*_aarch64.dmg` |
-| **macOS Intel** | `YouTube Playlist Downloader_*_x86_64.dmg` |
-| **Windows** | `YouTube Playlist Downloader_*_x64-setup.exe` |
+| **macOS Apple Silicon** (M1/M2/M3/M4) | `OmniGrab_*_aarch64.dmg` |
+| **macOS Intel** | `OmniGrab_*_x64.dmg` |
+| **Windows** | `OmniGrab_*_x64-setup.exe` |
 
 > **Lưu ý macOS**: Nếu gặp lỗi "Cannot be opened because it is from an unidentified developer", chuột phải → Open → Open.
 
@@ -111,22 +118,27 @@ Vào [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/releases
 
 ### 🎯 Cách sử dụng
 
-#### Playlist công khai
-1. Dán link playlist YouTube
-2. Chọn video, chất lượng, định dạng
+#### YouTube Playlist / Channel
+1. Chọn tab **Playlist**
+2. Dán link playlist hoặc channel YouTube (`youtube.com/@username`)
+3. Bấm **Lấy thông tin** → xem cards → chọn video
+4. Bấm **Bắt đầu tải**
+
+#### YouTube Video đơn
+1. Chọn tab **1 Video**
+2. Dán link video YouTube
 3. Bấm **Bắt đầu tải**
+
+#### TikTok
+1. Chọn tab **TikTok**
+2. Dán link user TikTok (`tiktok.com/@username`) hoặc nhiều link video
+3. Bấm **Lấy thông tin** → xem cards → chọn video
+4. Tùy chọn: bật "Tải không watermark"
 
 #### Playlist riêng tư / Members-only
 1. Chuyển sang tab **Riêng tư / Member**
 2. Làm theo 4 bước trên màn hình để export cookie
-3. Dán nội dung cookie vào ô文本
-4. Bấm **Bắt đầu tải**
-
-#### Xuất cookie từ trình duyệt
-1. Cài extension [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
-2. Mở [youtube.com](https://www.youtube.com) và đăng nhập
-3. Bấm icon extension → **Export**
-4. Copy toàn bộ nội dung và dán vào app
+3. Dán nội dung cookie → Bấm **Lấy thông tin**
 
 ---
 
@@ -179,7 +191,7 @@ npm run tauri dev
 
 | Thành phần | Công nghệ |
 |-----------|-----------|
-| Frontend | HTML / CSS / JS — Giao diện tối phong cách Apple |
+| Frontend | TypeScript + Vite — Apple-inspired light/dark theme |
 | Backend | Rust (Tauri 2.0) |
 | Downloader | yt-dlp |
 | Kích thước | ~4MB |
@@ -195,17 +207,25 @@ npm run tauri dev
 <tr><td>
 
 #### 🎬 Video Download
-- **Playlist & Single Video** — Download full playlists or individual videos
-- **Flat Output** — Tải tất cả video vào 1 folder thay vì tạo subfolder riêng
-- **Khóa UI khi tải** — Chống thao tác nhầm khi đang download
-- **Select All / Deselect All** — Quick toggle for video selection
-- **Delete from queue** — Remove unwanted videos before downloading
+- **3 modes** — Playlist, Single Video, TikTok
+- **YouTube Playlist** — Download full playlists or channels (paste `@username` link)
+- **YouTube Channel** — Paste `youtube.com/@username` to grab all channel videos
+- **TikTok** — Download from user profiles or paste multiple links. Watermark-free option
+- **Card UI** — Preview thumbnails, select/deselect individual videos
+- **Two-phase flow** — Click "Fetch Info" → view cards → select → "Start Download"
 - **9 Output Formats** — MP4, MP3, WebM, MKV, AVI, FLAC, WAV, OGG, M4A
 - **4 Quality Levels** — Best, 1080p, 720p, 480p
-- **Update Mode** — Skip already downloaded videos, only grab new ones
-- **Flat Output** — Download all videos into one folder instead of subfolders
-- **UI Lock** — Prevents accidental changes while downloading
-- **Real-time Progress** — Progress bar + live percentage tracking
+- **Update Mode** — Skip already downloaded videos
+- **Flat Output** — Download all into one folder instead of subfolders
+
+</td></tr>
+<tr><td>
+
+#### ⚡ Parallel Downloads & Progress
+- **Parallel downloads** — 1–5 simultaneous downloads (configurable)
+- **Real-time progress** — Show speed, ETA, file size per video
+- **Progress bars** — Track overall + per-video progress
+- **Auto-retry 503** — Automatically retry on server busy or network errors
 
 </td></tr>
 <tr><td>
@@ -229,7 +249,6 @@ npm run tauri dev
 #### 📝 Subtitles
 - **Download subtitles** — Automatically fetch subtitles with videos
 - **Language selection** — 15+ popular languages + custom option
-- **Auto-generated subs** — Include auto-generated subtitles when manual subs unavailable
 - **Embed into video** — Subtitles embedded directly into MP4/WebM/MKV
 
 </td></tr>
@@ -244,9 +263,10 @@ npm run tauri dev
 </td></tr>
 <tr><td>
 
-#### 🌍 Multilingual
+#### 🌗 UI
+- **Light / Dark mode** — Toggle theme to your preference
+- **Apple-inspired design** — Clean dark/light theme following Apple HIG
 - **15 UI languages** — Vietnamese, English, العربية, 中文, Nederlands, Français, Deutsch, עברית, Italiano, Polski, Português (BR), Română, Русский, Español, Türkçe
-- Instant language switching
 
 </td></tr>
 <tr><td>
@@ -254,8 +274,6 @@ npm run tauri dev
 #### ⚡ Performance
 - **Lightweight (~4MB)** — Compared to ~150MB for Electron apps
 - **Tauri 2.0 + Rust** — Fast, safe, low memory backend
-- **Concurrent downloads** — 4 simultaneous fragments, 20 retries
-- **Auto-retry 503** — Automatically retry on server busy or network errors
 - **Cross-platform** — macOS (Apple Silicon + Intel) & Windows
 
 </td></tr>
@@ -269,9 +287,9 @@ Go to [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/release
 
 | Platform | File |
 |----------|------|
-| **macOS Apple Silicon** (M1/M2/M3/M4) | `YouTube Playlist Downloader_*_aarch64.dmg` |
-| **macOS Intel** | `YouTube Playlist Downloader_*_x86_64.dmg` |
-| **Windows** | `YouTube Playlist Downloader_*_x64-setup.exe` |
+| **macOS Apple Silicon** (M1/M2/M3/M4) | `OmniGrab_*_aarch64.dmg` |
+| **macOS Intel** | `OmniGrab_*_x64.dmg` |
+| **Windows** | `OmniGrab_*_x64-setup.exe` |
 
 > **macOS note**: If you see "Cannot be opened because it is from an unidentified developer", right-click → Open → Open.
 
@@ -279,22 +297,27 @@ Go to [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/release
 
 ### 🎯 How to Use
 
-#### Public Playlist
-1. Paste the YouTube playlist URL
-2. Select videos, quality, and format
+#### YouTube Playlist / Channel
+1. Select **Playlist** tab
+2. Paste YouTube playlist or channel URL (`youtube.com/@username`)
+3. Click **Fetch Info** → view cards → select videos
+4. Click **Start Download**
+
+#### Single YouTube Video
+1. Select **1 Video** tab
+2. Paste YouTube video URL
 3. Click **Start Download**
+
+#### TikTok
+1. Select **TikTok** tab
+2. Paste TikTok user URL (`tiktok.com/@username`) or multiple video links
+3. Click **Fetch Info** → view cards → select videos
+4. Optional: enable "Download without watermark"
 
 #### Private / Members-only Playlist
 1. Switch to **Private / Members-only** tab
 2. Follow the 4-step on-screen guide to export cookies
-3. Paste the cookie content into the text area
-4. Click **Start Download**
-
-#### Export Cookies from Browser
-1. Install [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) extension
-2. Open [youtube.com](https://www.youtube.com) and log in
-3. Click the extension icon → **Export**
-4. Copy all content and paste into the app
+3. Paste cookie content → Click **Fetch Info**
 
 ---
 
@@ -347,7 +370,7 @@ npm run tauri dev
 
 | Component | Technology |
 |-----------|-----------|
-| Frontend | HTML / CSS / JS — Apple-inspired dark theme |
+| Frontend | TypeScript + Vite — Apple-inspired light/dark theme |
 | Backend | Rust (Tauri 2.0) |
 | Downloader | yt-dlp |
 | Size | ~4MB |

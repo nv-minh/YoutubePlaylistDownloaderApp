@@ -35,6 +35,8 @@
 - **9 định dạng** — MP4, MP3, WebM, MKV, AVI, FLAC, WAV, OGG, M4A
 - **4 mức chất lượng** — Best, 1080p, 720p, 480p
 - **Chế độ cập nhật** — Tự động bỏ qua video đã tải, chỉ tải video mới
+- **Flat Output** — Tải tất cả video vào 1 folder thay vì tạo subfolder riêng
+- **Khóa UI khi tải** — Chống thao tác nhầm khi đang download
 - **Theo dõi tiến trình** — Thanh tiến trình + phần trăm theo thời gian thực
 
 </td></tr>
@@ -68,6 +70,7 @@
 #### 🎵 Metadata & Tagging
 - **Tự động gắn tag** — Trích xuất artist, title, genre từ tên video
 - **Gắn metadata** — Nhúng ảnh bìa, nghệ sĩ, album vào file (qua ffmpeg)
+- **Lưu Info JSON** — Xuất metadata video ra file `.info.json`
 - **Hỗ trợ proxy** — SOCKS5 / HTTP proxy để vượt giới hạn địa lý
 
 </td></tr>
@@ -84,6 +87,7 @@
 - **Nhẹ (~4MB)** — So với ~150MB của ứng dụng Electron
 - **Tauri 2.0 + Rust** — Backend nhanh, an toàn, tiết kiệm RAM
 - **Tải xuống song song** — 4 fragment đồng thời, 20 lần thử lại
+- **Auto-retry 503** — Tự thử lại khi server busy hoặc lỗi mạng
 - **Cross-platform** — macOS (Apple Silicon + Intel) & Windows
 
 </td></tr>
@@ -142,6 +146,7 @@ Vào [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/releases
 **Yêu cầu:**
 - [Node.js](https://nodejs.org/) 18+
 - [Rust](https://www.rust-lang.org/tools/install) 1.80+
+- macOS: Xcode CLI Tools (`xcode-select --install`)
 - yt-dlp (tự cài khi chạy lần đầu)
 
 ```bash
@@ -151,10 +156,22 @@ npm install
 npm run tauri dev
 ```
 
-**Build release:**
-```bash
-npm run tauri build
-```
+**Dev commands:**
+
+| Lệnh | Mô tả |
+|------|-------|
+| `npm install` | Cài dependencies |
+| `npm run tauri dev` | Chạy dev server (hot reload) |
+| `npm run tauri build` | Build release binary |
+| `cd src-tauri && cargo check` | Kiểm tra lỗi compile Rust |
+| `cd src-tauri && cargo clippy` | Lint Rust code |
+
+**Release version mới:**
+1. Cập nhật version trong `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`
+2. Commit tất cả thay đổi
+3. Tag: `git tag v0.x.0`
+4. Push: `git push && git push --tags`
+5. GitHub Actions tự build và tạo release
 
 ---
 
@@ -179,12 +196,15 @@ npm run tauri build
 
 #### 🎬 Video Download
 - **Playlist & Single Video** — Download full playlists or individual videos
-- **Card-based UI** — Browse thumbnails, select/deselect videos individually
+- **Flat Output** — Tải tất cả video vào 1 folder thay vì tạo subfolder riêng
+- **Khóa UI khi tải** — Chống thao tác nhầm khi đang download
 - **Select All / Deselect All** — Quick toggle for video selection
 - **Delete from queue** — Remove unwanted videos before downloading
 - **9 Output Formats** — MP4, MP3, WebM, MKV, AVI, FLAC, WAV, OGG, M4A
 - **4 Quality Levels** — Best, 1080p, 720p, 480p
 - **Update Mode** — Skip already downloaded videos, only grab new ones
+- **Flat Output** — Download all videos into one folder instead of subfolders
+- **UI Lock** — Prevents accidental changes while downloading
 - **Real-time Progress** — Progress bar + live percentage tracking
 
 </td></tr>
@@ -218,6 +238,7 @@ npm run tauri build
 #### 🎵 Metadata & Tagging
 - **Auto-tagging** — Extract artist, title, genre from video title
 - **Metadata injection** — Embed thumbnail, artist, album into files (via ffmpeg)
+- **Save Info JSON** — Export video metadata as `.info.json` file
 - **Proxy support** — SOCKS5 / HTTP proxy to bypass geo-restrictions
 
 </td></tr>
@@ -234,6 +255,7 @@ npm run tauri build
 - **Lightweight (~4MB)** — Compared to ~150MB for Electron apps
 - **Tauri 2.0 + Rust** — Fast, safe, low memory backend
 - **Concurrent downloads** — 4 simultaneous fragments, 20 retries
+- **Auto-retry 503** — Automatically retry on server busy or network errors
 - **Cross-platform** — macOS (Apple Silicon + Intel) & Windows
 
 </td></tr>
@@ -292,6 +314,7 @@ Go to [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/release
 **Prerequisites:**
 - [Node.js](https://nodejs.org/) 18+
 - [Rust](https://www.rust-lang.org/tools/install) 1.80+
+- macOS: Xcode CLI Tools (`xcode-select --install`)
 - yt-dlp (auto-installed on first run)
 
 ```bash
@@ -301,10 +324,22 @@ npm install
 npm run tauri dev
 ```
 
-**Build release:**
-```bash
-npm run tauri build
-```
+**Dev commands:**
+
+| Command | Description |
+|---------|-------------|
+| `npm install` | Install dependencies |
+| `npm run tauri dev` | Run dev server (hot reload) |
+| `npm run tauri build` | Build release binary |
+| `cd src-tauri && cargo check` | Check Rust compilation |
+| `cd src-tauri && cargo clippy` | Lint Rust code |
+
+**Release new version:**
+1. Update version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`
+2. Commit all changes
+3. Tag: `git tag v0.x.0`
+4. Push: `git push && git push --tags`
+5. GitHub Actions auto-builds and creates release
 
 ---
 

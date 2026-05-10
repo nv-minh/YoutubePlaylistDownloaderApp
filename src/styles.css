@@ -313,6 +313,10 @@ textarea {
   accent-color: var(--primary);
   cursor: pointer;
 }
+.video-card .check-col input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 .video-card .thumb {
   width: 96px;

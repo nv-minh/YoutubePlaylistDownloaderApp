@@ -24,6 +24,8 @@ const translations = {
     exportComments: "Xuất bình luận", exportNone: "Không",
     statusExists: "Đã có",
     downloadSubs: "Tải phụ đề (subtitles)",
+    writeInfoJson: "Lưu thông tin video (.info.json)",
+    flatOutput: "Flat output (không tạo folder riêng cho mỗi video)",
     subLangs: "Ngôn ngữ phụ đề",
     subLangCustom: "Tùy chỉnh...",
     deleteVideo: "Xóa video này",
@@ -57,6 +59,8 @@ const translations = {
     exportComments: "Export comments", exportNone: "None",
     statusExists: "Exists",
     downloadSubs: "Download subtitles",
+    writeInfoJson: "Save video info (.info.json)",
+    flatOutput: "Flat output (no subfolder per video)",
     subLangs: "Subtitle language",
     subLangCustom: "Custom...",
     deleteVideo: "Remove this video",
@@ -103,6 +107,8 @@ const $injectMetadata = document.getElementById('inject-metadata');
 const $updateMode = document.getElementById('update-mode');
 const $exportComments = document.getElementById('export-comments');
 const $downloadSubs = document.getElementById('download-subs');
+const $writeInfoJson = document.getElementById('write-info-json');
+const $flatOutput = document.getElementById('flat-output');
 const $subLangSelect = document.getElementById('sub-lang-select');
 const $subLangs = document.getElementById('sub-langs');
 const $subCustom = document.getElementById('sub-custom');
@@ -116,6 +122,7 @@ const $stats = document.getElementById('stats');
 const $folder = document.getElementById('btn-folder');
 const $ytdlpStatus = document.getElementById('ytdlp-status');
 const $lang = document.getElementById('lang');
+let isDownloading = false;
 
 let outputDir = '';
 let actualDir = ''; // tracks the playlist subfolder
@@ -209,8 +216,15 @@ document.getElementById('btn-output').addEventListener('click', async () => {
 
 // ── Checkbox handling ─────────────────────────────────────────────────
 function toggleAllVideos(checked) {
+  if (isDownloading) return;
   document.querySelectorAll('.video-check').forEach(cb => { cb.checked = checked; });
   updateCardStyles();
+}
+
+function setCheckboxState(disabled) {
+  document.querySelectorAll('.video-check').forEach(cb => { cb.disabled = disabled; });
+  const selectAll = document.getElementById('select-all');
+  if (selectAll) selectAll.disabled = disabled;
 }
 
 function updateCardStyles() {
@@ -261,6 +275,8 @@ $start.addEventListener('click', async () => {
 
   // Single video mode - download directly
   if (downloadMode === 'video') {
+    isDownloading = true;
+    setCheckboxState(true);
     $start.disabled = true;
     $stop.disabled = false;
     $folder.disabled = true;
@@ -288,10 +304,14 @@ $start.addEventListener('click', async () => {
           download_subs: $downloadSubs.checked,
           sub_langs: getSubLangs(),
           auto_subs: true,
+          write_info_json: $writeInfoJson.checked,
+          flat_output: $flatOutput.checked,
         },
       });
     } catch (e) {
       appendLog(`Error: ${e}`);
+      isDownloading = false;
+      setCheckboxState(false);
       $start.disabled = false;
       $stop.disabled = true;
     }
@@ -311,6 +331,8 @@ $start.addEventListener('click', async () => {
     return;
   }
 
+  isDownloading = true;
+  setCheckboxState(true);
   $stop.disabled = false;
   $folder.disabled = true;
   $log.innerHTML = '';
@@ -337,7 +359,7 @@ $start.addEventListener('click', async () => {
       if ($updateMode.checked && outputDir) {
         try {
           existing = await invoke('check_existing_videos', {
-            outputDir, playlistTitle: result.title, videos: result.videos,
+            outputDir, playlistTitle: result.title, videos: result.videos, flatOutput: $flatOutput.checked,
           });
         } catch {}
       }
@@ -368,10 +390,14 @@ $start.addEventListener('click', async () => {
         download_subs: $downloadSubs.checked,
         sub_langs: getSubLangs(),
         auto_subs: true,
+        write_info_json: $writeInfoJson.checked,
+        flat_output: $flatOutput.checked,
       },
     });
   } catch (e) {
     appendLog(`Error: ${e}`);
+    isDownloading = false;
+    setCheckboxState(false);
     $start.disabled = false;
     $stop.disabled = true;
   }
@@ -399,6 +425,8 @@ document.getElementById('btn-redownload').addEventListener('click', async () => 
   const $redownload = document.getElementById('btn-redownload');
   $redownload.style.display = 'none';
 
+  isDownloading = true;
+  setCheckboxState(true);
   $start.disabled = true;
   $stop.disabled = false;
   $folder.disabled = true;
@@ -432,10 +460,14 @@ document.getElementById('btn-redownload').addEventListener('click', async () => 
         download_subs: $downloadSubs.checked,
         sub_langs: getSubLangs(),
         auto_subs: true,
+        write_info_json: $writeInfoJson.checked,
+        flat_output: $flatOutput.checked,
       },
     });
   } catch (e) {
     appendLog(`Error: ${e}`);
+    isDownloading = false;
+    setCheckboxState(false);
     $start.disabled = false;
     $stop.disabled = true;
   }
@@ -485,6 +517,7 @@ function renderQueue(videos, existing = null) {
   // Click on card row to toggle checkbox
   document.querySelectorAll('.video-card').forEach(card => {
     card.addEventListener('click', (e) => {
+      if (isDownloading) return;
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'A' || e.target.tagName === 'BUTTON' || e.target.closest('.btn-delete-card')) return;
       const cb = card.querySelector('.video-check');
       cb.checked = !cb.checked;
@@ -553,6 +586,8 @@ listen('download-progress', (event) => {
 
 listen('download-done', (event) => {
   const [ok, total, folderPath] = event.payload;
+  isDownloading = false;
+  setCheckboxState(false);
   $start.disabled = false;
   $stop.disabled = true;
   $folder.disabled = false;

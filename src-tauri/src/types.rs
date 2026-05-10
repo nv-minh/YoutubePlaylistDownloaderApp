@@ -45,6 +45,9 @@ pub struct DownloadSettings {
     pub auto_subs: bool,
     pub write_info_json: bool,
     pub flat_output: bool,
+    pub no_watermark: bool,
+    pub max_concurrent: usize,
+    pub is_tiktok: bool,
 }
 
 #[derive(Serialize)]

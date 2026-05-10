@@ -98,19 +98,31 @@ pub async fn fetch_playlist(
     proxy: Option<String>,
     path_state: State<'_, YtDlpPath>,
 ) -> Result<PlaylistResult, String> {
-    let playlist_url = match extract_playlist_id(&url) {
-        Some(id) => format!("https://www.youtube.com/playlist?list={}", id),
-        None => url.clone(),
+    let playlist_url = if url.contains("tiktok.com") {
+        url.clone()
+    } else if is_youtube_channel_url(&url) {
+        url.clone()
+    } else {
+        match extract_playlist_id(&url) {
+            Some(id) => format!("https://www.youtube.com/playlist?list={}", id),
+            None => url.clone(),
+        }
     };
 
     let yt_path = path_state.0.lock().await;
+    let is_tiktok = url.contains("tiktok.com");
     let mut cmd = new_cmd(&*yt_path);
     cmd.args(yt_dlp_extra());
     if !cookie_file.is_empty() {
         cmd.args(["--cookies", &cookie_file]);
     }
-    cmd.args(["--dump-json", "--flat-playlist"])
-        .arg(&playlist_url);
+    if is_tiktok {
+        // --flat-playlist doesn't return thumbnails for TikTok, use --dump-json instead
+        cmd.args(["--dump-json"]);
+    } else {
+        cmd.args(["--dump-json", "--flat-playlist"]);
+    }
+    cmd.arg(&playlist_url);
 
     if let Some(ref p) = proxy {
         cmd.args(["--proxy", p]);
@@ -159,7 +171,13 @@ pub async fn fetch_playlist(
                 .as_str()
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string())
-                .unwrap_or_else(|| format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", video_id));
+                .unwrap_or_else(|| {
+                    if is_tiktok {
+                        String::new()
+                    } else {
+                        format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", video_id)
+                    }
+                });
             videos.push(VideoInfo {
                 id: video_id,
                 title: title.to_string(),
@@ -240,7 +258,66 @@ pub async fn start_download(
     let videos: Vec<VideoInfo>;
     let selected: Vec<usize>;
 
-    if settings.single_video {
+    if settings.is_tiktok {
+        let url = settings.playlist_url.clone();
+        if let Some(caps) = RE_TIKTOK_USER.captures(&url) {
+            let username = &caps[1];
+            let tiktok_url = if url.contains("/video/") || url.contains("/@") && !url.trim_end_matches('/').ends_with(username) {
+                url.clone()
+            } else {
+                format!("https://www.tiktok.com/@{}", username)
+            };
+            let result = fetch_playlist(
+                tiktok_url,
+                settings.cookie_file.clone(),
+                settings.proxy.clone(),
+                path_state.clone(),
+            )
+            .await?;
+            playlist_title = format!("@{}", username);
+            videos = result.videos;
+        } else {
+            let urls: Vec<&str> = url.split(|c: char| c.is_whitespace() || c == ',')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            let mut all_videos = Vec::new();
+            for tiktok_url in &urls {
+                let mut cmd = new_cmd(&yt_path);
+                cmd.args(yt_dlp_extra());
+                cmd.args(["--dump-single-json", "--no-playlist"]);
+                if settings.no_watermark {
+                    cmd.args(["--extractor-args", "tiktok:video_codec=h264"]);
+                }
+                cmd.arg(tiktok_url);
+                if let Some(ref p) = settings.proxy {
+                    cmd.args(["--proxy", p]);
+                }
+                if let Ok(output) = cmd.output().await {
+                    if output.status.success() {
+                        if let Ok(data) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&output.stdout)) {
+                            let video_id = data["id"].as_str().unwrap_or("").to_string();
+                            all_videos.push(VideoInfo {
+                                id: video_id,
+                                title: data["title"].as_str().unwrap_or("TikTok").to_string(),
+                                channel: data["channel"].as_str().unwrap_or("").to_string(),
+                                duration: data["duration"].as_u64(),
+                                thumbnail: data["thumbnail"].as_str().unwrap_or("").to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+            playlist_title = "TikTok".to_string();
+            videos = all_videos;
+        }
+        selected = if settings.selected_indices.is_empty() {
+            (0..videos.len()).collect()
+        } else {
+            settings.selected_indices.clone()
+        };
+    } else if settings.single_video {
         let video = fetch_single_video(
             settings.playlist_url.clone(),
             settings.cookie_file.clone(),
@@ -252,9 +329,13 @@ pub async fn start_download(
         videos = vec![video];
         selected = vec![0];
     } else {
-        let playlist_url = match extract_playlist_id(&settings.playlist_url) {
-            Some(id) => format!("https://www.youtube.com/playlist?list={}", id),
-            None => settings.playlist_url.clone(),
+        let playlist_url = if is_youtube_channel_url(&settings.playlist_url) {
+            settings.playlist_url.clone()
+        } else {
+            match extract_playlist_id(&settings.playlist_url) {
+                Some(id) => format!("https://www.youtube.com/playlist?list={}", id),
+                None => settings.playlist_url.clone(),
+            }
         };
 
         let result = fetch_playlist(
@@ -366,9 +447,15 @@ pub async fn start_download(
             }
         }
 
-        let video_url = format!("https://www.youtube.com/watch?v={}", video.id);
+        let video_url = if settings.is_tiktok && !video.id.contains("http") {
+            format!("https://www.tiktok.com/@_/video/{}", video.id)
+        } else if video.id.contains("http") {
+            video.id.clone()
+        } else {
+            format!("https://www.youtube.com/watch?v={}", video.id)
+        };
 
-        // Download comments (if enabled)
+        // Download comments (if enabled, YouTube only)
         if settings.include_comments {
             let mut comment_cmd = new_cmd(&yt_path);
             comment_cmd.args(yt_dlp_extra());
@@ -412,6 +499,9 @@ pub async fn start_download(
             if !settings.cookie_file.is_empty() {
                 video_cmd.args(["--cookies", &settings.cookie_file]);
             }
+            if settings.is_tiktok && settings.no_watermark {
+                video_cmd.args(["--extractor-args", "tiktok:video_codec=h264"]);
+            }
             video_cmd
                 .args(["-f", &fmt])
                 .arg("-o")
@@ -422,7 +512,7 @@ pub async fn start_download(
                 .args(["--file-access-retries", "5", "--retry-sleep", "3"])
                 .args(["--buffer-size", "16K"])
                 .args(["--extractor-retries", "3"])
-                .args(["--concurrent-fragments", "4", "--progress", "--newline"]);
+                .args(["--concurrent-fragments", &settings.max_concurrent.to_string(), "--progress", "--newline"]);
             if settings.write_info_json {
                 video_cmd.arg("--write-info-json");
             }
@@ -491,7 +581,14 @@ pub async fn start_download(
                             let mut lines = reader.lines();
                             while let Ok(Some(line)) = lines.next_line().await {
                                 for segment in line.split('\r') {
-                                    if let Some(caps) = progress_re.captures(segment) {
+                                    if let Some(caps) = RE_PROGRESS_DETAIL.captures(segment) {
+                                        let pct = caps[1].to_string();
+                                        let size = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+                                        let speed = caps.get(3).map(|m| m.as_str()).unwrap_or("");
+                                        let eta = caps.get(4).map(|m| m.as_str()).unwrap_or("");
+                                        app_clone.emit("download-status", (idx, format!("downloading {}%", &pct))).ok();
+                                        app_clone.emit("video-progress", (idx, format!("{}%", &pct), speed.to_string(), eta.to_string(), size.to_string())).ok();
+                                    } else if let Some(caps) = progress_re.captures(segment) {
                                         let pct = &caps[1];
                                         app_clone.emit("download-status", (idx, format!("downloading {}%", pct))).ok();
                                     }

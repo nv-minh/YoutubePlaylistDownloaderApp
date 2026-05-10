@@ -20,6 +20,12 @@ static RE_PLAIN_ID: LazyLock<regex::Regex> = LazyLock::new(|| {
 pub static RE_PROGRESS: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"\[download\]\s+([\d.]+)%").unwrap()
 });
+pub static RE_PROGRESS_DETAIL: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"\[download\]\s+([\d.]+)%(?:\s+of\s+~?([\d.]+\w+))?(?:\s+at\s+([\d.]+\w+/s))?(?:\s+ETA\s+([\d:]+))?").unwrap()
+});
+pub static RE_TIKTOK_USER: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"(?i)^https?://(?:www\.)?tiktok\.com/@([\w.-]+)").unwrap()
+});
 
 // ── Environment Setup ──────────────────────────────────────────────────
 
@@ -149,6 +155,14 @@ pub fn extract_playlist_id(url: &str) -> Option<String> {
         return Some(url.trim().to_string());
     }
     None
+}
+
+static RE_YT_CHANNEL: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"(?i)^https?://(?:www\.)?youtube\.com/(?:@[\w.-]+|(?:channel|c|user)/[\w.-]+)").unwrap()
+});
+
+pub fn is_youtube_channel_url(url: &str) -> bool {
+    RE_YT_CHANNEL.is_match(url)
 }
 
 // ── Metadata Injection ─────────────────────────────────────────────────

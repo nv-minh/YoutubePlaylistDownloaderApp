@@ -46,7 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'YT Playlist Downloader ${{ github.ref_name }}'
+          releaseName: 'OmniGrab ${{ github.ref_name }}'
           releaseBody: 'Download and install the app for your platform.'
           releaseDraft: false
           prerelease: false

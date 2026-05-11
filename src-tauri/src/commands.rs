@@ -392,7 +392,7 @@ pub async fn start_download(
     let base_dir = if settings.single_video {
         base_dir
     } else {
-        let playlist_folder = base_dir.join(sanitize_folder_name(&playlist_title));
+        let playlist_folder = base_dir.join(sanitize_path_for_os(&playlist_title));
         fs::create_dir_all(&playlist_folder).map_err(|e| e.to_string())?;
         playlist_folder
     };
@@ -429,7 +429,7 @@ pub async fn start_download(
             let video_dir_check = if settings.flat_output {
                 base_dir.clone()
             } else {
-                base_dir.join(sanitize_folder_name(&video.title))
+                base_dir.join(sanitize_path_for_os(&video.title))
             };
             let video_exts = ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"];
             let exists = video_exts.iter().any(|ext| {
@@ -486,7 +486,7 @@ pub async fn start_download(
             let video_dir = if settings.flat_output {
                 base_dir.clone()
             } else {
-                let folder_name = sanitize_folder_name(&video.title);
+                let folder_name = sanitize_path_for_os(&video.title);
                 let dir = base_dir.join(&folder_name);
                 fs::create_dir_all(&dir).ok();
                 dir
@@ -599,17 +599,8 @@ pub async fn start_download(
                 }
             }
 
-            if settings.download_subs && !is_audio {
-                video_cmd.args(["--write-subs", "--convert-subs", "srt"]);
-                if settings.auto_subs {
-                    video_cmd.arg("--write-auto-subs");
-                }
-                let langs = settings.sub_langs.as_deref().unwrap_or("en");
-                video_cmd.args(["--sub-langs", langs]);
-                if matches!(settings.format.as_str(), "mp4" | "webm" | "mkv") {
-                    video_cmd.arg("--embed-subs");
-                }
-            }
+            // Subtitles are downloaded in a separate step after video succeeds,
+            // so subtitle errors (e.g. 429) don't block the video download.
 
             if let Some(ref p) = settings.proxy {
                 video_cmd.args(["--proxy", p]);
@@ -711,7 +702,7 @@ pub async fn start_download(
                 };
 
                 match exit_status {
-                    Ok(s) if s.success() && video_path.exists() => {
+                    Ok(_exit_s) if video_path.exists() => {
                         let clean_path = video_dir.join(format!("{}.{}", file_slug, ext));
                         if video_path != clean_path {
                             let _ = fs::rename(&video_path, &clean_path);
@@ -726,6 +717,39 @@ pub async fn start_download(
                         if settings.inject_metadata {
                             if let Err(e) = inject_metadata(&video_dir, &video.thumbnail, &video.title, &playlist_title, &settings.format) {
                                 app.emit("download-log", format!("  -> Metadata error: {}", e)).ok();
+                            }
+                        }
+
+                        // Download subtitles separately so subtitle errors don't block the video
+                        if settings.download_subs && !is_audio {
+                            let mut sub_cmd = new_cmd(&yt_path);
+                            sub_cmd.args(yt_dlp_extra());
+                            if !settings.cookie_file.is_empty() {
+                                sub_cmd.args(["--cookies", &settings.cookie_file]);
+                            }
+                            sub_cmd.args(["--write-subs", "--convert-subs", "srt", "--skip-download"]);
+                            if settings.auto_subs {
+                                sub_cmd.arg("--write-auto-subs");
+                            }
+                            let langs = settings.sub_langs.as_deref().unwrap_or("en");
+                            sub_cmd.args(["--sub-langs", langs]);
+                            if matches!(settings.format.as_str(), "mp4" | "webm" | "mkv") {
+                                sub_cmd.arg("--embed-subs");
+                            }
+                            sub_cmd.args(["--no-overwrites", "--no-warnings", "--force-ipv4"]);
+                            sub_cmd.args(["--sleep-requests", "1"]);
+                            if let Some(ref p) = settings.proxy {
+                                sub_cmd.args(["--proxy", p]);
+                            }
+                            sub_cmd.arg("-o").arg(video_dir.join(format!("{}.%(ext)s", file_slug)).to_string_lossy().as_ref());
+                            sub_cmd.arg(&video_url);
+                            match tokio::time::timeout(std::time::Duration::from_secs(120), sub_cmd.output()).await {
+                                Ok(Ok(out)) if out.status.success() => {
+                                    app.emit("download-log", "  -> Subtitles OK".to_string()).ok();
+                                }
+                                _ => {
+                                    app.emit("download-log", "  -> Subtitles skipped (unavailable or rate limited)".to_string()).ok();
+                                }
                             }
                         }
                     }
@@ -817,7 +841,7 @@ pub async fn start_download(
                                 let retry_stderr_buf = retry_stderr_task.await.unwrap_or_default();
 
                                 match retry_exit {
-                                    Ok(Ok(s)) if s.success() => {
+                                    Ok(Ok(_retry_s)) => {
                                         let retry_path = {
                                             let ideal = video_dir.join(format!("{}.{}", file_slug, ext));
                                             if ideal.exists() {
@@ -980,7 +1004,7 @@ pub fn check_existing_videos(
     let base_dir = if flat_output {
         PathBuf::from(&output_dir)
     } else {
-        PathBuf::from(&output_dir).join(sanitize_folder_name(&playlist_title))
+        PathBuf::from(&output_dir).join(sanitize_path_for_os(&playlist_title))
     };
     if !base_dir.exists() {
         return vec![false; videos.len()];
@@ -988,7 +1012,7 @@ pub fn check_existing_videos(
     let video_exts = ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"];
     videos.iter().map(|v| {
         let file_prefix = slugify(&v.title);
-        let video_dir = if flat_output { base_dir.clone() } else { base_dir.join(sanitize_folder_name(&v.title)) };
+        let video_dir = if flat_output { base_dir.clone() } else { base_dir.join(sanitize_path_for_os(&v.title)) };
         if !video_dir.is_dir() { return false; }
         if let Ok(entries) = fs::read_dir(&video_dir) {
             for entry in entries.flatten() {

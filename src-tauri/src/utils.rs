@@ -135,6 +135,25 @@ pub fn sanitize_folder_name(name: &str) -> String {
     if trimmed.len() > 200 { trimmed[..200].to_string() } else { trimmed }
 }
 
+/// Windows: yt-dlp (Python) can fail with cp1252 encoding on non-ASCII paths.
+/// Convert to ASCII-safe names (e.g. "Chuyến Tàu" → "Chuyen Tau").
+#[cfg(target_os = "windows")]
+pub fn sanitize_path_for_os(name: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    let ascii: String = name.nfd()
+        .filter(|c| c.is_ascii() && (c.is_alphanumeric() || *c == ' ' || *c == '-' || *c == '_'))
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if ascii.len() > 200 { ascii[..200].trim_end().to_string() } else { ascii }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn sanitize_path_for_os(name: &str) -> String {
+    sanitize_folder_name(name)
+}
+
 pub fn slugify(name: &str) -> String {
     use unicode_normalization::UnicodeNormalization;
     let slug: String = name.nfd()

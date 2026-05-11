@@ -48,6 +48,7 @@ export type TranslationKey =
   | "subLangs" | "subLangCustom" | "deleteVideo" | "startDownload"
   | "stop" | "openFolder" | "clear" | "queueEmpty" | "selectAll"
   | "selected" | "noCookieAlert" | "fetching" | "redownload"
-  | "tabPlaylist" | "tabVideo" | "videoUrl" | "videoUrlPlaceholder"
+  | "cookieHintTitle" | "cookieHintStep1" | "cookieHintStep2" | "cookieHintStep3" | "cookieHintStep4"
+  | "tabPlaylist" | "tabVideos" | "videosUrl" | "videosUrlPlaceholder"
   | "tabTiktok" | "tiktokUrl" | "tiktokUrlPlaceholder" | "noWatermark"
   | "parallelDownloads" | "fetchInfo";

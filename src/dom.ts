@@ -3,8 +3,10 @@ import type { VideoInfo } from "./types";
 // ── DOM Elements ───────────────────────────────────────────────────────
 
 export const $url = document.getElementById("url") as HTMLInputElement;
-export const $urlVideo = document.getElementById("url-video") as HTMLInputElement;
-export const $urlTiktok = document.getElementById("url-tiktok") as HTMLInputElement;
+export const $urlVideos = document.getElementById("url-videos") as HTMLTextAreaElement;
+export const $urlCount = document.getElementById("url-count") as HTMLElement;
+export const $urlTiktok = document.getElementById("url-tiktok") as HTMLTextAreaElement;
+export const $urlCountTiktok = document.getElementById("url-count-tiktok") as HTMLElement;
 export const $cookieText = document.getElementById("cookie-text") as HTMLTextAreaElement;
 export const $output = document.getElementById("output") as HTMLInputElement;
 export const $quality = document.getElementById("quality") as HTMLSelectElement;
@@ -42,14 +44,23 @@ export let isDownloading = false;
 export let outputDir = "";
 export let actualDir = "";
 export let accessType = "public";
-export let downloadMode: "playlist" | "video" | "tiktok" = "playlist";
+export let downloadMode: "playlist" | "videos" | "tiktok" = "playlist";
 export let playlistVideos: (VideoInfo | null)[] = [];
 export let failedIndices: number[] = [];
+export let cookieErrorIndices: number[] = [];
 
 export function setIsDownloading(v: boolean): void { isDownloading = v; }
 export function setOutputDir(v: string): void { outputDir = v; }
 export function setActualDir(v: string): void { actualDir = v; }
 export function setAccessType(v: "public" | "private"): void { accessType = v; }
-export function setDownloadMode(v: "playlist" | "video" | "tiktok"): void { downloadMode = v; }
+export function setDownloadMode(v: "playlist" | "videos" | "tiktok"): void { downloadMode = v; }
+
+export function parseVideoUrls(text: string): string[] {
+  return text
+    .split(/[\n,]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && /^https?:\/\//.test(s));
+}
 export function setPlaylistVideos(v: (VideoInfo | null)[]): void { playlistVideos = v; }
 export function setFailedIndices(v: number[]): void { failedIndices = v; }
+export function setCookieErrorIndices(v: number[]): void { cookieErrorIndices = v; }

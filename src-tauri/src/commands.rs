@@ -5,9 +5,11 @@ use crate::types::*;
 use crate::utils::*;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::sync::Semaphore;
 
 // ── yt-dlp Management ──────────────────────────────────────────────────
 
@@ -128,9 +130,11 @@ pub async fn fetch_playlist(
         cmd.args(["--proxy", p]);
     }
 
-    let output = cmd
-        .output()
-        .await
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(300),
+        cmd.output()
+    ).await
+        .map_err(|_| "Timeout: playlist fetch took longer than 5 minutes".to_string())?
         .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
 
     if !output.status.success() {
@@ -211,7 +215,12 @@ async fn fetch_single_video(
         cmd.args(["--proxy", p]);
     }
 
-    let output = cmd.output().await.map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        cmd.output()
+    ).await
+        .map_err(|_| "Timeout: video info fetch took longer than 2 minutes".to_string())?
+        .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
@@ -249,10 +258,6 @@ pub async fn start_download(
     let fmt = quality_format(&settings.quality, &settings.format);
     let base_dir = PathBuf::from(&settings.output_dir);
     fs::create_dir_all(&base_dir).map_err(|e| e.to_string())?;
-
-    let mut video_ok = 0u32;
-    let mut comment_ok = 0u32;
-    let mut total_comments = 0u32;
 
     let playlist_title: String;
     let videos: Vec<VideoInfo>;
@@ -328,6 +333,34 @@ pub async fn start_download(
         playlist_title = video.title.clone();
         videos = vec![video];
         selected = vec![0];
+    } else if settings.playlist_url.contains('\n') {
+        // Multi-video mode: split by newline, fetch each
+        let urls: Vec<&str> = settings.playlist_url
+            .split('\n')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let mut all_videos = Vec::new();
+        for video_url in &urls {
+            match fetch_single_video(
+                video_url.to_string(),
+                settings.cookie_file.clone(),
+                settings.proxy.clone(),
+                path_state.clone(),
+            ).await {
+                Ok(video) => all_videos.push(video),
+                Err(e) => {
+                    app.emit("download-log", format!("Failed to fetch {}: {}", video_url, e)).ok();
+                }
+            }
+        }
+        if all_videos.is_empty() {
+            return Err("Could not fetch info for any of the provided URLs".into());
+        }
+        playlist_title = format!("{} videos", all_videos.len());
+        videos = all_videos;
+        selected = (0..videos.len()).collect();
     } else {
         let playlist_url = if is_youtube_channel_url(&settings.playlist_url) {
             settings.playlist_url.clone()
@@ -375,16 +408,19 @@ pub async fn start_download(
     .ok();
 
     let selected_count = selected.len();
-    let mut completed: usize = 0;
+    let completed = Arc::new(AtomicU32::new(0));
+    let video_ok = Arc::new(AtomicU32::new(0));
+    let comment_ok = Arc::new(AtomicU32::new(0));
+    let total_comments = Arc::new(AtomicU32::new(0));
+    let max_concurrent = settings.max_concurrent.max(1) as usize;
+    let sem = Arc::new(Semaphore::new(max_concurrent));
+
+    let mut tasks = tokio::task::JoinSet::new();
 
     for (i, video) in videos.iter().enumerate() {
         if !selected.contains(&i) {
             app.emit("download-status", (i + 1, "Skipped".to_string())).ok();
             continue;
-        }
-        if cancel.0.load(Ordering::SeqCst) {
-            app.emit("download-log", "Cancelled.".to_string()).ok();
-            break;
         }
 
         // Update mode: skip already downloaded videos
@@ -403,97 +439,123 @@ pub async fn start_download(
             if exists {
                 app.emit("download-status", (i + 1, "Exists".to_string())).ok();
                 app.emit("download-log", format!("[{}] {} - already exists, skipping", i + 1, video.title)).ok();
-                video_ok += 1;
+                video_ok.fetch_add(1, Ordering::SeqCst);
                 continue;
             }
         }
 
-        if cancel.0.load(Ordering::SeqCst) {
-            app.emit("download-log", "Cancelled.".to_string()).ok();
-            break;
-        }
-
         let idx = i + 1;
-        completed += 1;
-        app.emit("download-progress", (completed, selected_count)).ok();
-        app.emit("download-status", (idx, "downloading".to_string())).ok();
-        app.emit("download-log", format!("[{}/{}] {}", idx, total, video.title)).ok();
+        let c = completed.fetch_add(1, Ordering::SeqCst) + 1;
+        app.emit("download-progress", (c, selected_count)).ok();
+        app.emit("download-status", (idx, "pending".to_string())).ok();
+        app.emit("download-log", format!("[{}/{}] {} - queued", idx, total, video.title)).ok();
 
-        let file_slug = slugify(&video.title);
-        let video_dir = if settings.flat_output {
-            base_dir.clone()
-        } else {
-            let folder_name = sanitize_folder_name(&video.title);
-            let dir = base_dir.join(&folder_name);
-            fs::create_dir_all(&dir).ok();
-            dir
-        };
+        // Clone everything needed for the async task
+        let video = video.clone();
+        let yt_path = yt_path.clone();
+        let fmt = fmt.clone();
+        let settings = settings.clone();
+        let base_dir = base_dir.clone();
+        let playlist_title = playlist_title.clone();
+        let app = app.clone();
+        let cancel = cancel.0.clone();
+        let sem = sem.clone();
+        let video_ok_c = video_ok.clone();
+        let comment_ok_c = comment_ok.clone();
+        let total_comments_c = total_comments.clone();
 
-        // Clean up partial files from previous failed downloads
-        if video_dir.is_dir() {
-            if let Ok(entries) = fs::read_dir(&video_dir) {
-                for entry in entries.flatten() {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    let lower = name.to_lowercase();
-                    if name.starts_with(&format!("{}.", file_slug)) {
-                        let is_final = lower.ends_with(&format!(".{}", settings.format));
-                        let is_media = ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"].iter()
-                            .any(|ext| lower.ends_with(&format!(".{}", ext)));
-                        if is_media && !is_final {
-                            let _ = fs::remove_file(entry.path());
+        tasks.spawn(async move {
+            // Acquire semaphore permit — limits concurrent downloads
+            let _permit = match sem.acquire().await {
+                Ok(p) => p,
+                Err(_) => return, // Semaphore closed, bail out
+            };
+
+            // Stagger start to avoid triggering bot detection
+            let jitter = (idx as u64 % 3) * 2;
+            tokio::time::sleep(std::time::Duration::from_secs(jitter)).await;
+
+            if cancel.load(Ordering::SeqCst) {
+                return;
+            }
+
+            app.emit("download-status", (idx, "downloading".to_string())).ok();
+            app.emit("download-log", format!("[{}/{}] {}", idx, total, video.title)).ok();
+
+            let file_slug = slugify(&video.title);
+            let video_dir = if settings.flat_output {
+                base_dir.clone()
+            } else {
+                let folder_name = sanitize_folder_name(&video.title);
+                let dir = base_dir.join(&folder_name);
+                fs::create_dir_all(&dir).ok();
+                dir
+            };
+
+            // Clean up partial files from previous failed downloads
+            if video_dir.is_dir() {
+                if let Ok(entries) = fs::read_dir(&video_dir) {
+                    for entry in entries.flatten() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        let lower = name.to_lowercase();
+                        if name.starts_with(&format!("{}.", file_slug)) {
+                            let is_final = lower.ends_with(&format!(".{}", settings.format));
+                            let is_media = ["mp4","mp3","webm","mkv","avi","flac","wav","ogg","m4a"].iter()
+                                .any(|ext| lower.ends_with(&format!(".{}", ext)));
+                            if is_media && !is_final {
+                                let _ = fs::remove_file(entry.path());
+                            }
                         }
                     }
                 }
             }
-        }
 
-        let video_url = if settings.is_tiktok && !video.id.contains("http") {
-            format!("https://www.tiktok.com/@_/video/{}", video.id)
-        } else if video.id.contains("http") {
-            video.id.clone()
-        } else {
-            format!("https://www.youtube.com/watch?v={}", video.id)
-        };
+            let video_url = if settings.is_tiktok && !video.id.contains("http") {
+                format!("https://www.tiktok.com/@_/video/{}", video.id)
+            } else if video.id.contains("http") {
+                video.id.clone()
+            } else {
+                format!("https://www.youtube.com/watch?v={}", video.id)
+            };
 
-        // Download comments (if enabled, YouTube only)
-        if settings.include_comments {
-            let mut comment_cmd = new_cmd(&yt_path);
-            comment_cmd.args(yt_dlp_extra());
-            if !settings.cookie_file.is_empty() {
-                comment_cmd.args(["--cookies", &settings.cookie_file]);
-            }
-            if let Some(ref p) = settings.proxy {
-                comment_cmd.args(["--proxy", p]);
-            }
-            comment_cmd
-                .args(["--write-comments", "--skip-download", "--no-warnings", "--force-ipv4"])
-                .arg("-o")
-                .arg(video_dir.join(format!("{}.%(ext)s", file_slug)).to_string_lossy().as_ref())
-                .arg(&video_url);
+            // Download comments (if enabled, YouTube only)
+            if settings.include_comments {
+                let mut comment_cmd = new_cmd(&yt_path);
+                comment_cmd.args(yt_dlp_extra());
+                if !settings.cookie_file.is_empty() {
+                    comment_cmd.args(["--cookies", &settings.cookie_file]);
+                }
+                if let Some(ref p) = settings.proxy {
+                    comment_cmd.args(["--proxy", p]);
+                }
+                comment_cmd
+                    .args(["--write-comments", "--skip-download", "--no-warnings", "--force-ipv4"])
+                    .arg("-o")
+                    .arg(video_dir.join(format!("{}.%(ext)s", file_slug)).to_string_lossy().as_ref())
+                    .arg(&video_url);
 
-            if let Ok(output) = comment_cmd.output().await {
-                if output.status.success() {
-                    comment_ok += 1;
-                    let n = generate_video_comments_html(&video_dir, &video.title, &video.id, &video.channel, &file_slug, settings.flat_output);
-                    total_comments += n as u32;
-                    app.emit("download-log", format!("  -> {} comments", n)).ok();
-                } else {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    let msg: String = stderr.chars().take(200).collect();
-                    app.emit("download-log", format!("  -> Comment error: {}", msg)).ok();
-                    if msg.contains("Sign in") || msg.contains("bot") || msg.contains("cookie") || msg.contains("HTTP Error 403") {
-                        app.emit("download-log", "  Hint: Your cookies may have expired. Please re-export from browser and paste again.".to_string()).ok();
+                if let Ok(output) = comment_cmd.output().await {
+                    if output.status.success() {
+                        comment_ok_c.fetch_add(1, Ordering::SeqCst);
+                        let n = generate_video_comments_html(&video_dir, &video.title, &video.id, &video.channel, &file_slug, settings.flat_output);
+                        total_comments_c.fetch_add(n as u32, Ordering::SeqCst);
+                        app.emit("download-log", format!("  -> {} comments", n)).ok();
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        let msg: String = stderr.chars().take(200).collect();
+                        app.emit("download-log", format!("  -> Comment error: {}", msg)).ok();
+                        if msg.contains("Sign in") || msg.contains("bot") || msg.contains("cookie") || msg.contains("HTTP Error 403") {
+                            app.emit("download-log", "  Hint: Your cookies may have expired. Please re-export from browser and paste again.".to_string()).ok();
+                        }
                     }
                 }
             }
-        }
 
-        if cancel.0.load(Ordering::SeqCst) {
-            break;
-        }
+            if cancel.load(Ordering::SeqCst) {
+                return;
+            }
 
-        // Download video
-        {
+            // Download video
             let mut video_cmd = new_cmd(&yt_path);
             video_cmd.args(yt_dlp_extra());
             if !settings.cookie_file.is_empty() {
@@ -512,6 +574,7 @@ pub async fn start_download(
                 .args(["--file-access-retries", "5", "--retry-sleep", "3"])
                 .args(["--buffer-size", "16K"])
                 .args(["--extractor-retries", "3"])
+                .args(["--sleep-requests", "1"])
                 .args(["--concurrent-fragments", &settings.max_concurrent.to_string(), "--progress", "--newline"]);
             if settings.write_info_json {
                 video_cmd.arg("--write-info-json");
@@ -598,8 +661,14 @@ pub async fn start_download(
                     }
                 });
 
+                let download_timeout = if video.duration.unwrap_or(0) > 3600 {
+                    std::time::Duration::from_secs(1800) // 30 min for long videos (>1h)
+                } else {
+                    std::time::Duration::from_secs(600) // 10 min for regular videos
+                };
+
                 let exit_result = tokio::time::timeout(
-                    std::time::Duration::from_secs(600),
+                    download_timeout,
                     child.wait()
                 ).await;
 
@@ -612,7 +681,7 @@ pub async fn start_download(
                         let _ = child.kill().await;
                         let _ = stderr_task.abort();
                         app.emit("download-status", (idx, "Failed".to_string())).ok();
-                        continue;
+                        return;
                     }
                 };
 
@@ -650,7 +719,7 @@ pub async fn start_download(
                         let final_path = if clean_path.exists() { &clean_path } else { &video_path };
                         let size_mb = final_path.metadata().map(|m| m.len()).unwrap_or(0) as f64
                             / (1024.0 * 1024.0);
-                        video_ok += 1;
+                        video_ok_c.fetch_add(1, Ordering::SeqCst);
                         app.emit("download-log", format!("  -> Video OK ({:.1} MB)", size_mb)).ok();
                         app.emit("download-status", (idx, "done".to_string())).ok();
 
@@ -695,6 +764,7 @@ pub async fn start_download(
                                 .args(["--retries", "3", "--fragment-retries", "3"])
                                 .args(["--socket-timeout", "30", "--throttled-rate", "100K"])
                                 .args(["--extractor-retries", "2"])
+                                .args(["--sleep-requests", "1"])
                                 .args(["--progress", "--newline"])
                                 .args(["--merge-output-format", &settings.format]);
                             if let Some(ref p) = settings.proxy {
@@ -766,7 +836,7 @@ pub async fn start_download(
                                             if retry_path != clean { let _ = fs::rename(&retry_path, &clean); }
                                             let fp = if clean.exists() { &clean } else { &retry_path };
                                             let sz = fp.metadata().map(|m| m.len()).unwrap_or(0) as f64 / (1024.0 * 1024.0);
-                                            video_ok += 1;
+                                            video_ok_c.fetch_add(1, Ordering::SeqCst);
                                             app.emit("download-log", format!("  -> Video OK via fallback ({:.1} MB)", sz)).ok();
                                             app.emit("download-status", (idx, "done".to_string())).ok();
                                             if settings.include_comments {
@@ -776,64 +846,96 @@ pub async fn start_download(
                                                     comment_cmd.args(["--cookies", &settings.cookie_file]);
                                                 }
                                                 comment_cmd
-                                                    .args(["--no-warnings", "--force-ipv4", "--skip-download"])
-                                                    .args(["--write-comments", "--print", "none"])
+                                                    .args(["--write-comments", "--skip-download", "--no-warnings", "--force-ipv4"])
+                                                    .arg("-o")
+                                                    .arg(video_dir.join(format!("{}.%(ext)s", file_slug)).to_string_lossy().as_ref())
                                                     .arg(&video_url);
-                                                if let Some(ref p) = settings.proxy {
-                                                    comment_cmd.args(["--proxy", p]);
-                                                }
                                                 if let Ok(output) = comment_cmd.output().await {
                                                     if output.status.success() {
+                                                        comment_ok_c.fetch_add(1, Ordering::SeqCst);
                                                         let n = generate_video_comments_html(&video_dir, &video.title, &video.id, &video.channel, &file_slug, settings.flat_output);
-                                                        total_comments += n as u32;
-                                                        app.emit("download-log", format!("  -> {} comments", n)).ok();
+                                                        total_comments_c.fetch_add(n as u32, Ordering::SeqCst);
                                                     }
                                                 }
                                             }
-                                            if settings.inject_metadata {
-                                                if let Err(e) = inject_metadata(&video_dir, &video.thumbnail, &video.title, &playlist_title, &settings.format) {
-                                                    app.emit("download-log", format!("  -> Metadata error: {}", e)).ok();
-                                                }
-                                            }
-                                            continue;
+                                        } else {
+                                            app.emit("download-status", (idx, "Failed".to_string())).ok();
                                         }
                                     }
                                     _ => {
-                                        for line in retry_stderr_buf.lines().take(10) {
+                                        let is_members = retry_stderr_buf.contains("Join this channel") || retry_stderr_buf.contains("members-only") || retry_stderr_buf.contains("Sign in to confirm");
+                                        let is_unavailable = retry_stderr_buf.contains("Video unavailable") || retry_stderr_buf.contains("Private video");
+                                        let is_429 = retry_stderr_buf.contains("HTTP Error 429");
+                                        let is_503 = retry_stderr_buf.contains("HTTP Error 503");
+                                        let is_network_error = retry_stderr_buf.contains("Giving up after") || retry_stderr_buf.contains("bytes read");
+                                        let err = if is_members {
+                                            "Members only"
+                                        } else if is_unavailable {
+                                            "Unavailable"
+                                        } else if is_429 {
+                                            "Rate limited"
+                                        } else if retry_stderr_buf.contains("Sign in") || retry_stderr_buf.contains("bot") || retry_stderr_buf.contains("cookie") || retry_stderr_buf.contains("HTTP Error 403") {
+                                            "Cookie expired"
+                                        } else if is_503 {
+                                            "Server busy"
+                                        } else if is_network_error {
+                                            "Network error"
+                                        } else {
+                                            "Failed"
+                                        };
+                                        for line in retry_stderr_buf.lines().take(40) {
                                             app.emit("download-log", format!("  | {}", line)).ok();
                                         }
+                                        if err == "Cookie expired" || err == "Members only" {
+                                            app.emit("download-log", "  Hint: Your cookies may have expired. Please re-export from browser and paste again.".to_string()).ok();
+                                        } else if err == "Rate limited" {
+                                            app.emit("download-log", "  Hint: YouTube is rate-limiting requests. Try reducing parallel downloads or wait a few minutes.".to_string()).ok();
+                                        }
+                                        app.emit("download-status", (idx, err.to_string())).ok();
                                     }
                                 }
                             }
-                        }
-
-                        let err = if stderr_buf.contains("members-only")
-                            || stderr_buf.contains("Join this channel")
-                        {
-                            "Members only"
-                        } else if stderr_buf.contains("Video unavailable") || stderr_buf.contains("Private") {
-                            "Unavailable"
-                        } else if stderr_buf.contains("Sign in") || stderr_buf.contains("bot") || stderr_buf.contains("cookie") || stderr_buf.contains("HTTP Error 403") {
-                            "Cookie expired"
-                        } else if is_503 {
-                            "Server busy"
-                        } else if is_network_error {
-                            "Network error"
                         } else {
-                            "Failed"
-                        };
-                        for line in stderr_buf.lines().take(40) {
-                            app.emit("download-log", format!("  | {}", line)).ok();
+                            let is_members = stderr_buf.contains("Join this channel") || stderr_buf.contains("members-only") || stderr_buf.contains("Sign in to confirm");
+                            let is_unavailable = stderr_buf.contains("Video unavailable") || stderr_buf.contains("Private video");
+                            let is_429 = stderr_buf.contains("HTTP Error 429");
+                            let is_503 = stderr_buf.contains("HTTP Error 503");
+                            let is_network_error = stderr_buf.contains("Giving up after") || stderr_buf.contains("bytes read");
+                            let err = if is_members {
+                                "Members only"
+                            } else if is_unavailable {
+                                "Unavailable"
+                            } else if is_429 {
+                                "Rate limited"
+                            } else if stderr_buf.contains("Sign in") || stderr_buf.contains("bot") || stderr_buf.contains("cookie") || stderr_buf.contains("HTTP Error 403") {
+                                "Cookie expired"
+                            } else if is_503 {
+                                "Server busy"
+                            } else if is_network_error {
+                                "Network error"
+                            } else {
+                                "Failed"
+                            };
+                            for line in stderr_buf.lines().take(40) {
+                                app.emit("download-log", format!("  | {}", line)).ok();
+                            }
+                            if err == "Cookie expired" || err == "Members only" {
+                                app.emit("download-log", "  Hint: Your cookies may have expired. Please re-export from browser and paste again.".to_string()).ok();
+                            }
+                            app.emit("download-status", (idx, err.to_string())).ok();
                         }
-                        if err == "Cookie expired" || err == "Members only" {
-                            app.emit("download-log", "  Hint: Your cookies may have expired. Please re-export from browser and paste again.".to_string()).ok();
-                        }
-                        app.emit("download-status", (idx, err.to_string())).ok();
                     }
                 }
             }
-        }
+        });
     }
+
+    // Wait for all download tasks to complete
+    while tasks.join_next().await.is_some() {}
+
+    let video_ok = video_ok.load(Ordering::SeqCst);
+    let comment_ok = comment_ok.load(Ordering::SeqCst);
+    let total_comments = total_comments.load(Ordering::SeqCst);
 
     app.emit(
         "download-log",

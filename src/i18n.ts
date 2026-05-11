@@ -33,8 +33,13 @@ const translations: Record<Lang, Record<TranslationKey, string>> = {
     noCookieAlert: "Vui lòng dán cookie cho nội dung riêng tư.",
     fetching: "Đang lấy thông tin...",
     redownload: "Tải lại lỗi",
-    tabPlaylist: "Playlist", tabVideo: "1 Video",
-    videoUrl: "Link Video", videoUrlPlaceholder: "Dán link YouTube video...",
+    cookieHintTitle: "⚠️ Cookie có thể đã hết hạn",
+    cookieHintStep1: "1. Mở youtube.com → đăng nhập lại",
+    cookieHintStep2: '2. Dùng extension <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" class="link">Get cookies.txt LOCALLY</a> → Export',
+    cookieHintStep3: "3. Dán cookie mới vào phần <strong>Access Type → Private</strong> bên trên",
+    cookieHintStep4: "4. Bấm <strong>Tải lại lỗi</strong> bên trên",
+    tabPlaylist: "Playlist", tabVideos: "Videos",
+    videosUrl: "Link các Video", videosUrlPlaceholder: "Dán mỗi link trên một dòng...",
     tabTiktok: "TikTok", tiktokUrl: "Link TikTok",
     tiktokUrlPlaceholder: "Dán link video hoặc @username...",
     noWatermark: "Tải không watermark",
@@ -73,8 +78,13 @@ const translations: Record<Lang, Record<TranslationKey, string>> = {
     noCookieAlert: "Please paste cookies for private content.",
     fetching: "Fetching info...",
     redownload: "Redownload failed",
-    tabPlaylist: "Playlist", tabVideo: "1 Video",
-    videoUrl: "Video URL", videoUrlPlaceholder: "Paste YouTube video URL...",
+    cookieHintTitle: "⚠️ Cookie may have expired",
+    cookieHintStep1: "1. Open youtube.com → log in again",
+    cookieHintStep2: '2. Use <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" class="link">Get cookies.txt LOCALLY</a> extension → Export',
+    cookieHintStep3: "3. Paste new cookie into <strong>Access Type → Private</strong> section above",
+    cookieHintStep4: "4. Click <strong>Redownload failed</strong> above",
+    tabPlaylist: "Playlist", tabVideos: "Videos",
+    videosUrl: "Video URLs", videosUrlPlaceholder: "Paste one URL per line, or comma-separated...",
     tabTiktok: "TikTok", tiktokUrl: "TikTok URL",
     tiktokUrlPlaceholder: "Paste video link or @username...",
     noWatermark: "Download without watermark",
@@ -96,5 +106,6 @@ export function applyTranslations(): void {
   document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
     const key = el.getAttribute("data-i18n-placeholder") as TranslationKey;
     if (key && el instanceof HTMLInputElement) el.placeholder = t(key);
+    if (key && el instanceof HTMLTextAreaElement) el.placeholder = t(key);
   });
 }

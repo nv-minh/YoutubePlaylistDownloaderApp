@@ -44,11 +44,15 @@
       <div class="settings">
         <!-- Download Mode Tabs -->
         <div class="field">
-          <label>Mode</label>
-          <div class="tabs">
-            <button class="tab active" data-mode="playlist" data-i18n="tabPlaylist">Playlist</button>
-            <button class="tab" data-mode="video" data-i18n="tabVideo">1 Video</button>
-            <button class="tab" data-mode="tiktok" data-i18n="tabTiktok">TikTok</button>
+          <label data-i18n="downloadMode">Mode</label>
+          <div class="platform-tabs">
+            <div class="tab-group tab-group-yt">
+              <button class="tab active" data-mode="playlist" data-i18n="tabPlaylist">Playlist</button>
+              <button class="tab" data-mode="videos" data-i18n="tabVideos">Videos</button>
+            </div>
+            <div class="tab-group tab-group-tt">
+              <button class="tab" data-mode="tiktok" data-i18n="tabTiktok">TikTok</button>
+            </div>
           </div>
         </div>
 
@@ -58,16 +62,18 @@
             <input type="text" id="url" data-i18n-placeholder="urlPlaceholder" />
           </div>
         </div>
-        <div class="mode-content" id="mode-video">
+        <div class="mode-content" id="mode-videos">
           <div class="field">
-            <label data-i18n="videoUrl">Video URL</label>
-            <input type="text" id="url-video" data-i18n-placeholder="videoUrlPlaceholder" />
+            <label data-i18n="videosUrl">Video URLs</label>
+            <textarea id="url-videos" rows="4" data-i18n-placeholder="videosUrlPlaceholder"></textarea>
+            <span class="url-count" id="url-count"></span>
           </div>
         </div>
         <div class="mode-content" id="mode-tiktok">
           <div class="field">
             <label data-i18n="tiktokUrl">TikTok URL</label>
-            <input type="text" id="url-tiktok" data-i18n-placeholder="tiktokUrlPlaceholder" />
+            <textarea id="url-tiktok" rows="4" data-i18n-placeholder="tiktokUrlPlaceholder"></textarea>
+            <span class="url-count" id="url-count-tiktok"></span>
           </div>
           <div class="tiktok-options">
             <label class="checkbox-row">
@@ -237,6 +243,15 @@
 
         <button class="btn-start" id="btn-start" data-i18n="startDownload">Start Download</button>
         <button class="btn-redownload" id="btn-redownload" style="display:none" data-i18n="redownload">Redownload failed</button>
+        <div class="cookie-hint" id="cookie-hint" style="display:none">
+          <div class="cookie-hint-title" data-i18n="cookieHintTitle">⚠️ Cookie may have expired</div>
+          <div class="cookie-hint-steps">
+            <div data-i18n="cookieHintStep1">1. Open youtube.com → log in again</div>
+            <div data-i18n="cookieHintStep2">2. Use extension → Export</div>
+            <div data-i18n="cookieHintStep3">3. Paste new cookie above</div>
+            <div data-i18n="cookieHintStep4">4. Click Redownload failed</div>
+          </div>
+        </div>
         <div class="btn-row">
           <button class="btn-stop" id="btn-stop" disabled data-i18n="stop">Stop</button>
           <button class="btn-clear" id="btn-clear" data-i18n="clear">Clear</button>

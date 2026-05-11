@@ -28,10 +28,10 @@
 <tr><td>
 
 #### 🎬 Tải xuống video
-- **3 chế độ** — Playlist, Video đơn, TikTok
+- **3 chế độ** — Playlist, Videos, TikTok (nhóm theo nền tảng)
 - **YouTube Playlist** — Tải cả playlist hoặc channel (paste link `@username`)
-- **YouTube Channel** — Dán link `youtube.com/@username` để tải tất cả video
-- **TikTok** — Tải video từ user profile hoặc dán nhiều link. Hỗ trợ không watermark
+- **YouTube Videos** — Dán nhiều link video (mỗi link 1 dòng) để tải hàng loạt
+- **TikTok** — Tải từ user profile hoặc dán nhiều link video. Hỗ trợ không watermark
 - **Giao diện thẻ (Card UI)** — Xem trước thumbnail, chọn/bỏ chọn từng video
 - **Hai giai đoạn** — Bấm "Lấy thông tin" → xem cards → chọn → "Bắt đầu tải"
 - **9 định dạng** — MP4, MP3, WebM, MKV, AVI, FLAC, WAV, OGG, M4A
@@ -43,10 +43,11 @@
 <tr><td>
 
 #### ⚡ Tải song song & Tiến trình
-- **Parallel downloads** — Tải 1–5 video đồng thời (tuỳ chỉnh)
+- **Parallel downloads** — Tải 1–5 video đồng thời (tuỳ chỉnh), thực sự song song
 - **Real-time progress** — Hiển thị tốc độ, ETA, dung lượng mỗi video
 - **Thanh tiến trình** — Theo dõi tổng tiến trình + từng video riêng
 - **Auto-retry 503** — Tự thử lại khi server busy hoặc lỗi mạng
+- **Bot protection** — Anti-rate-limit, stagger starts, sleep giữa requests
 
 </td></tr>
 <tr><td>
@@ -55,6 +56,7 @@
 - **Playlist công khai** — Không cần đăng nhập
 - **Playlist riêng tư / Members-only** — Hỗ trợ nhập cookie từ trình duyệt
 - **Hướng dẫn 4 bước** — Export cookie trực tiếp trong app
+- **Cookie expired hint** — Tự động hiển thị hướng dẫn cập nhật cookie khi lỗi
 
 </td></tr>
 <tr><td>
@@ -145,15 +147,15 @@ sudo apt-get install -f  # cài dependencies thiếu
 ### 🎯 Cách sử dụng
 
 #### YouTube Playlist / Channel
-1. Chọn tab **Playlist**
+1. Chọn tab **Playlist** (nhóm YouTube)
 2. Dán link playlist hoặc channel YouTube (`youtube.com/@username`)
 3. Bấm **Lấy thông tin** → xem cards → chọn video
 4. Bấm **Bắt đầu tải**
 
-#### YouTube Video đơn
-1. Chọn tab **1 Video**
-2. Dán link video YouTube
-3. Bấm **Bắt đầu tải**
+#### YouTube Videos (nhiều link)
+1. Chọn tab **Videos** (nhóm YouTube)
+2. Dán nhiều link video YouTube, mỗi link 1 dòng
+3. Bấm **Bắt đầu tải** — tất cả video được tải song song
 
 #### TikTok
 1. Chọn tab **TikTok**
@@ -174,6 +176,7 @@ sudo apt-get install -f  # cài dependencies thiếu
 |--------|-----------|
 | **"Cookie expired"** | Cookie đã hết hạn. Export lại từ trình duyệt |
 | **"Members only"** | Cần đăng ký thành viên kênh + dùng cookie mới |
+| **"Rate limited"** | YouTube giới hạn request — giảm song song hoặc chờ vài phút |
 | **Folder trống** | Thường do cookie hết hạn — export lại |
 | **yt-dlp không tìm thấy** | App tự cài yt-dlp khi mở lần đầu |
 
@@ -234,10 +237,10 @@ npm run tauri dev
 <tr><td>
 
 #### 🎬 Video Download
-- **3 modes** — Playlist, Single Video, TikTok
+- **3 modes** — Playlist, Videos, TikTok (grouped by platform)
 - **YouTube Playlist** — Download full playlists or channels (paste `@username` link)
-- **YouTube Channel** — Paste `youtube.com/@username` to grab all channel videos
-- **TikTok** — Download from user profiles or paste multiple links. Watermark-free option
+- **YouTube Videos** — Paste multiple video URLs (one per line) for batch download
+- **TikTok** — Download from user profiles or paste multiple video links. Watermark-free option
 - **Card UI** — Preview thumbnails, select/deselect individual videos
 - **Two-phase flow** — Click "Fetch Info" → view cards → select → "Start Download"
 - **9 Output Formats** — MP4, MP3, WebM, MKV, AVI, FLAC, WAV, OGG, M4A
@@ -249,10 +252,11 @@ npm run tauri dev
 <tr><td>
 
 #### ⚡ Parallel Downloads & Progress
-- **Parallel downloads** — 1–5 simultaneous downloads (configurable)
+- **Parallel downloads** — 1–5 simultaneous downloads (configurable), truly parallel
 - **Real-time progress** — Show speed, ETA, file size per video
 - **Progress bars** — Track overall + per-video progress
 - **Auto-retry 503** — Automatically retry on server busy or network errors
+- **Bot protection** — Anti-rate-limit, staggered starts, sleep between requests
 
 </td></tr>
 <tr><td>
@@ -261,6 +265,7 @@ npm run tauri dev
 - **Public playlists** — No login required
 - **Private / Members-only** — Import cookies from your browser
 - **4-step guide** — Export cookies directly within the app
+- **Cookie expired hint** — Auto-shows guide to refresh cookies on failure
 
 </td></tr>
 <tr><td>
@@ -351,15 +356,15 @@ sudo apt-get install -f  # install missing dependencies
 ### 🎯 How to Use
 
 #### YouTube Playlist / Channel
-1. Select **Playlist** tab
+1. Select **Playlist** tab (YouTube group)
 2. Paste YouTube playlist or channel URL (`youtube.com/@username`)
 3. Click **Fetch Info** → view cards → select videos
 4. Click **Start Download**
 
-#### Single YouTube Video
-1. Select **1 Video** tab
-2. Paste YouTube video URL
-3. Click **Start Download**
+#### Multiple YouTube Videos
+1. Select **Videos** tab (YouTube group)
+2. Paste multiple YouTube video URLs, one per line
+3. Click **Start Download** — all videos download in parallel
 
 #### TikTok
 1. Select **TikTok** tab
@@ -380,6 +385,7 @@ sudo apt-get install -f  # install missing dependencies
 |-------|----------|
 | **"Cookie expired"** | Cookies expired. Re-export from browser |
 | **"Members only"** | Must be a channel member + use fresh cookies |
+| **"Rate limited"** | YouTube rate-limiting — reduce parallel downloads or wait a few minutes |
 | **Empty folders** | Usually expired cookies — re-export and try again |
 | **yt-dlp not found** | App auto-installs yt-dlp on first launch |
 

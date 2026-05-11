@@ -3,15 +3,16 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import type { PlaylistResult, DownloadSettings } from "./types";
 import {
-  $url, $urlVideo, $urlTiktok, $output, $quality, $format, $proxy,
+  $url, $urlVideos, $urlCount, $urlTiktok, $urlCountTiktok, $output, $quality, $format, $proxy,
   $autoTag, $commentsOnly, $injectMetadata, $updateMode,
   $exportComments, $downloadSubs, $writeInfoJson, $flatOutput,
   $subLangSelect, $subLangs, $start, $stop, $folder,
   $log, $progressFill, $stats, $queue,
   $noWatermark, $maxConcurrent,
   isDownloading, outputDir, actualDir, accessType, downloadMode,
-  playlistVideos, failedIndices,
-  setIsDownloading, setOutputDir, setActualDir, setFailedIndices,
+  playlistVideos, failedIndices, cookieErrorIndices,
+  setIsDownloading, setOutputDir, setActualDir, setFailedIndices, setCookieErrorIndices,
+  parseVideoUrls,
 } from "./dom";
 import { t } from "./i18n";
 import { setCheckboxState, appendLog, renderQueue } from "./ui";
@@ -95,11 +96,21 @@ function buildSettings(overrides: Partial<DownloadSettings>): DownloadSettings {
 export async function startDownload(): Promise<void> {
   if ($start.disabled) return;
   $start.disabled = true;
-  const url = (downloadMode === "video" ? $urlVideo.value.trim() : downloadMode === "tiktok" ? $urlTiktok.value.trim() : $url.value.trim());
-  if (!url) {
+  const url = (downloadMode === "videos" ? "" : downloadMode === "tiktok" ? $urlTiktok.value.trim() : $url.value.trim());
+  if (!url && downloadMode !== "videos") {
     $start.disabled = false;
-    (downloadMode === "video" ? $urlVideo : downloadMode === "tiktok" ? $urlTiktok : $url).focus();
+    (downloadMode === "tiktok" ? $urlTiktok : $url).focus();
     return;
+  }
+
+  // Multi-video mode: parse URLs from textarea
+  if (downloadMode === "videos") {
+    const urls = parseVideoUrls($urlVideos.value);
+    if (urls.length === 0) {
+      $start.disabled = false;
+      $urlVideos.focus();
+      return;
+    }
   }
 
   const cookieFile = await getCookieFile();
@@ -112,8 +123,9 @@ export async function startDownload(): Promise<void> {
     $output.value = selected;
   }
 
-  // Single video mode
-  if (downloadMode === "video") {
+  // Multi-video mode
+  if (downloadMode === "videos") {
+    const urls = parseVideoUrls($urlVideos.value);
     setIsDownloading(true);
     setCheckboxState(true);
     $start.disabled = true;
@@ -122,14 +134,21 @@ export async function startDownload(): Promise<void> {
     $log.innerHTML = "";
     $progressFill.style.width = "0%";
     $stats.textContent = "";
+    setFailedIndices([]);
+    setCookieErrorIndices([]);
+
+    const $redownload = document.getElementById("btn-redownload") as HTMLElement | null;
+    if ($redownload) $redownload.style.display = "none";
+
     $queue.innerHTML = `<div class="queue-empty">${t("fetching")}</div>`;
 
     try {
       await invoke("start_download", {
         settings: buildSettings({
-          playlist_url: url,
+          playlist_url: urls.join("\n"),
           cookie_file: cookieFile || "",
-          single_video: true,
+          single_video: false,
+          is_tiktok: false,
         }),
       });
     } catch (e) {
@@ -142,8 +161,69 @@ export async function startDownload(): Promise<void> {
     return;
   }
 
-  // TikTok mode — two-phase: fetch → cards → download
+  // TikTok mode
   if (downloadMode === "tiktok") {
+    const tiktokUrls = parseVideoUrls($urlTiktok.value);
+    if (tiktokUrls.length === 0) {
+      $start.disabled = false;
+      $urlTiktok.focus();
+      return;
+    }
+
+    const isSingleUserUrl = tiktokUrls.length === 1
+      && /^https?:\/\/(www\.)?tiktok\.com\/@\w[\w.-]*\/?$/.test(tiktokUrls[0].trim());
+
+    // Multi-URL or single video link: direct download (like Videos mode)
+    if (!isSingleUserUrl || playlistVideos.length > 0) {
+      const selectedIndices: number[] = [];
+      document.querySelectorAll<HTMLInputElement>(".video-check:checked").forEach((cb) => {
+        const idx = parseInt(cb.dataset.index!);
+        if (playlistVideos[idx] !== null) selectedIndices.push(idx);
+      });
+
+      if (playlistVideos.length > 0 && selectedIndices.length === 0) {
+        alert("Please select at least one video.");
+        $start.disabled = false;
+        return;
+      }
+
+      setIsDownloading(true);
+      setCheckboxState(true);
+      $start.disabled = true;
+      $stop.disabled = false;
+      $folder.disabled = true;
+      $log.innerHTML = "";
+      $progressFill.style.width = "0%";
+      $stats.textContent = "";
+      setFailedIndices([]);
+    setCookieErrorIndices([]);
+
+      const $redownload = document.getElementById("btn-redownload") as HTMLElement | null;
+      if ($redownload) $redownload.style.display = "none";
+
+      $queue.innerHTML = `<div class="queue-empty">${t("fetching")}</div>`;
+
+      try {
+        await invoke("start_download", {
+          settings: buildSettings({
+            playlist_url: tiktokUrls.join("\n"),
+            cookie_file: cookieFile || "",
+            is_tiktok: true,
+            single_video: false,
+            selected_indices: selectedIndices,
+          }),
+        });
+      } catch (e) {
+        appendLog(`Error: ${e}`);
+        setIsDownloading(false);
+        setCheckboxState(false);
+        $start.disabled = false;
+        $stop.disabled = true;
+      }
+      return;
+    }
+
+    // Single user profile URL: two-phase (fetch all → select → download)
     const selectedIndices: number[] = [];
     document.querySelectorAll<HTMLInputElement>(".video-check:checked").forEach((cb) => {
       const idx = parseInt(cb.dataset.index!);
@@ -165,6 +245,7 @@ export async function startDownload(): Promise<void> {
     $progressFill.style.width = "0%";
     $stats.textContent = "";
     setFailedIndices([]);
+    setCookieErrorIndices([]);
 
     const $redownload = document.getElementById("btn-redownload") as HTMLElement | null;
     if ($redownload) $redownload.style.display = "none";
@@ -176,7 +257,7 @@ export async function startDownload(): Promise<void> {
     try {
       if (playlistVideos.length === 0) {
         const result = await invoke<PlaylistResult>("fetch_playlist", {
-          url, cookieFile: cookieFile || "", proxy: $proxy.value || null,
+          url: tiktokUrls[0], cookieFile: cookieFile || "", proxy: $proxy.value || null,
         });
         renderQueue(result.videos, null);
         $log.innerHTML = "";
@@ -192,7 +273,7 @@ export async function startDownload(): Promise<void> {
 
       await invoke("start_download", {
         settings: buildSettings({
-          playlist_url: url,
+          playlist_url: tiktokUrls[0],
           cookie_file: cookieFile || "",
           is_tiktok: true,
           single_video: false,
@@ -292,6 +373,9 @@ export async function redownloadFailed(): Promise<void> {
   const $redownload = document.getElementById("btn-redownload") as HTMLElement;
   $redownload.style.display = "none";
 
+  const $cookieHint = document.getElementById("cookie-hint");
+  if ($cookieHint) $cookieHint.style.display = "none";
+
   setIsDownloading(true);
   setCheckboxState(true);
   $start.disabled = true;
@@ -345,12 +429,18 @@ export function setupEventListeners(): void {
       el.className = `status ${status}`;
     }
     const videoIdx = idx - 1;
-    if (["Failed", "Members only", "Unavailable", "Cookie expired"].includes(status)) {
+    if (["Failed", "Members only", "Unavailable", "Cookie expired", "Rate limited"].includes(status)) {
       if (!failedIndices.includes(videoIdx)) {
         setFailedIndices([...failedIndices, videoIdx]);
       }
+      if (["Members only", "Cookie expired", "Rate limited"].includes(status)) {
+        if (!cookieErrorIndices.includes(videoIdx)) {
+          setCookieErrorIndices([...cookieErrorIndices, videoIdx]);
+        }
+      }
     } else if (status === "done" || status === "Exists") {
       setFailedIndices(failedIndices.filter((i) => i !== videoIdx));
+      setCookieErrorIndices(cookieErrorIndices.filter((i) => i !== videoIdx));
     }
   });
 
@@ -401,6 +491,11 @@ export function setupEventListeners(): void {
     if ($redownload && failedIndices.length > 0) {
       $redownload.style.display = "inline-block";
       $redownload.textContent = `${t("redownload")} (${failedIndices.length})`;
+    }
+
+    const $cookieHint = document.getElementById("cookie-hint");
+    if ($cookieHint) {
+      $cookieHint.style.display = cookieErrorIndices.length > 0 ? "block" : "none";
     }
   });
 }

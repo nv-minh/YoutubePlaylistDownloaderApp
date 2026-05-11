@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 // ── State ──────────────────────────────────────────────────────────────
 
-pub struct CancelState(pub AtomicBool);
+pub struct CancelState(pub Arc<AtomicBool>);
 pub struct YtDlpPath(pub Mutex<String>);
 
 // ── Data Types ─────────────────────────────────────────────────────────

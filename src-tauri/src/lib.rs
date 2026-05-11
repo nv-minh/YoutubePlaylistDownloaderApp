@@ -4,6 +4,7 @@ mod types;
 mod utils;
 
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use types::{CancelState, YtDlpPath};
 
@@ -19,7 +20,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(CancelState(AtomicBool::new(false)))
+        .manage(CancelState(Arc::new(AtomicBool::new(false))))
         .manage(YtDlpPath(Mutex::new(yt_path)))
         .invoke_handler(tauri::generate_handler![
             commands::check_ytdlp,

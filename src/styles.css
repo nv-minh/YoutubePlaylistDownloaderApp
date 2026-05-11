@@ -274,6 +274,32 @@ textarea {
   color: #fff;
 }
 
+/* ── Cookie Hint ─────────────────────────── */
+.cookie-hint {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 152, 0, 0.1);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+.cookie-hint-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--status-skipped);
+  margin-bottom: 6px;
+}
+.cookie-hint-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.cookie-hint-steps strong {
+  color: var(--text-primary);
+}
+
 .btn-row {
   display: flex;
   gap: 6px;
@@ -336,6 +362,40 @@ textarea {
 }
 .mode-content.active {
   display: block;
+}
+
+/* ── Platform Tabs ─────────────────────────── */
+.platform-tabs {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.tab-group {
+  display: flex;
+  gap: 0;
+  background: var(--bg-input);
+  border-radius: var(--radius-pill);
+  padding: 3px;
+}
+.tab-group .tab {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+.tab-group-yt {
+  flex: 1;
+}
+.tab-group-tt {
+  flex-shrink: 0;
+}
+
+/* ── Multi-URL counter ────────────────────── */
+.url-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  padding-top: 2px;
+}
+.url-count.has-urls {
+  color: var(--accent-on-surface);
 }
 
 /* ── Cookie Steps ───────────────────────── */

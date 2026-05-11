@@ -112,7 +112,7 @@
 
 ### 📥 Cài đặt
 
-Vào [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/releases) và tải:
+Vào [Releases](https://github.com/nv-minh/OmniGrab/releases) và tải:
 
 | Nền tảng | File |
 |----------|------|
@@ -188,8 +188,8 @@ sudo apt-get install -f  # cài dependencies thiếu
 - yt-dlp (tự cài khi chạy lần đầu)
 
 ```bash
-git clone https://github.com/nv-minh/YoutubePlaylistDownloaderApp.git
-cd YoutubePlaylistDownloaderApp
+git clone https://github.com/nv-minh/OmniGrab.git
+cd OmniGrab
 npm install
 npm run tauri dev
 ```
@@ -318,7 +318,7 @@ npm run tauri dev
 
 ### 📥 Installation
 
-Go to [Releases](https://github.com/nv-minh/YoutubePlaylistDownloaderApp/releases) and download:
+Go to [Releases](https://github.com/nv-minh/OmniGrab/releases) and download:
 
 | Platform | File |
 |----------|------|
@@ -394,8 +394,8 @@ sudo apt-get install -f  # install missing dependencies
 - yt-dlp (auto-installed on first run)
 
 ```bash
-git clone https://github.com/nv-minh/YoutubePlaylistDownloaderApp.git
-cd YoutubePlaylistDownloaderApp
+git clone https://github.com/nv-minh/OmniGrab.git
+cd OmniGrab
 npm install
 npm run tauri dev
 ```

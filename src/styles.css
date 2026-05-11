@@ -119,6 +119,15 @@ body {
   color: var(--text-primary);
   cursor: pointer;
 }
+/* Fix dropdown popup white background on WebKitGTK (Linux) */
+.lang-select option {
+  background: var(--bg-settings);
+  color: var(--text-primary);
+}
+select option {
+  background: var(--bg-settings);
+  color: var(--text-primary);
+}
 
 /* ── Settings ───────────────────────────── */
 .settings {

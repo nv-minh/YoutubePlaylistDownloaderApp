@@ -86,7 +86,34 @@ pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, S
                 .map_err(|e| format!("yt-dlp version check failed: {}", e))?;
             Ok(String::from_utf8_lossy(&version_output.stdout).trim().to_string())
         } else {
-            Err(String::from_utf8_lossy(&output.stderr).to_string())
+            // pip failed — try downloading yt-dlp binary directly to ~/.local/bin
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+            let local_bin = PathBuf::from(&home).join(".local/bin");
+            let _ = fs::create_dir_all(&local_bin);
+            let bin_path = local_bin.join("yt-dlp");
+            let url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
+
+            let curl_ok = new_cmd("curl")
+                .args(["-sL", url, "-o"])
+                .arg(&bin_path)
+                .output()
+                .await
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+
+            if curl_ok && bin_path.exists() {
+                let _ = std::process::Command::new("chmod").arg("+x").arg(&bin_path).output();
+                let new_path = bin_path.to_string_lossy().to_string();
+                *path_state.0.lock().await = new_path.clone();
+                let version_output = new_cmd(&new_path)
+                    .arg("--version")
+                    .output()
+                    .await
+                    .map_err(|e| format!("yt-dlp version check failed: {}", e))?;
+                Ok(String::from_utf8_lossy(&version_output.stdout).trim().to_string())
+            } else {
+                Err("Failed to install yt-dlp. Install manually: pip install yt-dlp or download from https://github.com/yt-dlp/yt-dlp".into())
+            }
         }
     }
 }

@@ -10,6 +10,12 @@ use types::{CancelState, YtDlpPath};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Fix libEGL warning on Linux — use software rendering for WebKitGTK
+    #[cfg(target_os = "linux")]
+    {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
     let yt_path = if cfg!(target_os = "windows") {
         "yt-dlp.exe".into()
     } else {

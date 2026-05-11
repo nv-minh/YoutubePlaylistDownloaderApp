@@ -64,6 +64,11 @@ pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, S
         let new_path = exe_path.to_string_lossy().to_string();
         *path_state.0.lock().await = new_path.clone();
 
+        // Try installing curl_cffi for TikTok impersonation support
+        let _ = new_cmd("python")
+            .args(["-m", "pip", "install", "--quiet", "curl_cffi"])
+            .output().await;
+
         let version_output = new_cmd(&new_path)
             .arg("--version")
             .output()
@@ -73,7 +78,7 @@ pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, S
     } else {
         let python = "python3";
         let output = new_cmd(python)
-            .args(["-m", "pip", "install", "--upgrade", "yt-dlp"])
+            .args(["-m", "pip", "install", "--upgrade", "yt-dlp", "curl_cffi"])
             .output()
             .await
             .map_err(|e| format!("pip failed: {}", e))?;
@@ -147,7 +152,7 @@ pub async fn fetch_playlist(
     }
     if is_tiktok {
         cmd.args(["--dump-json"]);
-        // Use TikTok API directly instead of webpage scraping to avoid "Unexpected response" errors
+        cmd.args(["--impersonate", "chrome"]);
         cmd.args(["--extractor-args", "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com"]);
     } else {
         cmd.args(["--dump-json", "--flat-playlist"]);
@@ -323,6 +328,7 @@ pub async fn start_download(
                 if settings.no_watermark {
                     cmd.args(["--extractor-args", "tiktok:video_codec=h264"]);
                 }
+                cmd.args(["--impersonate", "chrome"]);
                 cmd.args(["--extractor-args", "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com"]);
                 cmd.arg(tiktok_url);
                 if let Some(ref p) = settings.proxy {
@@ -596,6 +602,7 @@ pub async fn start_download(
                     tiktok_args.push_str(";video_codec=h264");
                 }
                 video_cmd.args(["--extractor-args", &tiktok_args]);
+                video_cmd.args(["--impersonate", "chrome"]);
             }
             video_cmd
                 .args(["-f", &fmt])

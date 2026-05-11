@@ -152,7 +152,6 @@ pub async fn fetch_playlist(
     }
     if is_tiktok {
         cmd.args(["--dump-json"]);
-        cmd.args(["--impersonate", "chrome"]);
         cmd.args(["--extractor-args", "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com"]);
     } else {
         cmd.args(["--dump-json", "--flat-playlist"]);
@@ -328,7 +327,6 @@ pub async fn start_download(
                 if settings.no_watermark {
                     cmd.args(["--extractor-args", "tiktok:video_codec=h264"]);
                 }
-                cmd.args(["--impersonate", "chrome"]);
                 cmd.args(["--extractor-args", "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com"]);
                 cmd.arg(tiktok_url);
                 if let Some(ref p) = settings.proxy {
@@ -602,7 +600,6 @@ pub async fn start_download(
                     tiktok_args.push_str(";video_codec=h264");
                 }
                 video_cmd.args(["--extractor-args", &tiktok_args]);
-                video_cmd.args(["--impersonate", "chrome"]);
             }
             video_cmd
                 .args(["-f", &fmt])

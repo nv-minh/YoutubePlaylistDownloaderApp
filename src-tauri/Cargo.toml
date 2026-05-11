@@ -1,6 +1,6 @@
 [package]
 name = "omnigrab"
-version = "0.10.1"
+version = "0.11.0"
 description = "OmniGrab — YouTube Playlist Downloader"
 authors = ["you"]
 edition = "2021"

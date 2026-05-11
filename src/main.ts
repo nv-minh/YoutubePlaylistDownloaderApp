@@ -56,6 +56,30 @@ function updateUrlCount(textarea: HTMLTextAreaElement, counter: HTMLElement): vo
 $urlVideos.addEventListener("input", () => updateUrlCount($urlVideos, $urlCount));
 $urlTiktok.addEventListener("input", () => updateUrlCount($urlTiktok, $urlCountTiktok));
 
+// Dynamic button label: "Download Now" for single video URLs, "Fetch Info" otherwise
+function updateStartButtonLabel(): void {
+  if (downloadMode === "videos") {
+    $start.textContent = t("startDownload");
+    return;
+  }
+  if (downloadMode === "tiktok") {
+    const urls = parseVideoUrls($urlTiktok.value);
+    if (urls.length === 1 && !/^https?:\/\/(www\.)?tiktok\.com\/@\w[\w.-]*\/?$/.test(urls[0].trim())) {
+      $start.textContent = t("startDownload");
+    } else {
+      $start.textContent = t("fetchInfo");
+    }
+    return;
+  }
+  // Playlist mode
+  const val = $url.value.trim();
+  const isSingleVideo = /^https?:\/\/(www\.)?(youtube\.com\/watch\?|youtu\.be\/|youtube\.com\/shorts\/)/.test(val)
+    && !/[?&]list=/.test(val);
+  $start.textContent = isSingleVideo ? t("startDownload") : t("fetchInfo");
+}
+$url.addEventListener("input", updateStartButtonLabel);
+$urlTiktok.addEventListener("input", updateStartButtonLabel);
+
 // ── Access tab switching ───────────────────────────────────────────────
 document.querySelectorAll<HTMLElement>(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
@@ -84,7 +108,7 @@ document.querySelectorAll<HTMLElement>(".tab").forEach((tab) => {
         el.style.display = isTiktok ? "none" : "";
       });
       // Reset button label and queue on mode switch
-      $start.textContent = tab.dataset.mode === "videos" ? t("startDownload") : t("fetchInfo");
+      updateStartButtonLabel();
       $start.disabled = false;
       setPlaylistVideos([]);
       setFailedIndices([]);

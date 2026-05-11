@@ -201,7 +201,9 @@ export async function startDownload(): Promise<void> {
       const $redownload = document.getElementById("btn-redownload") as HTMLElement | null;
       if ($redownload) $redownload.style.display = "none";
 
-      $queue.innerHTML = `<div class="queue-empty">${t("fetching")}</div>`;
+      if (playlistVideos.length === 0) {
+        $queue.innerHTML = `<div class="queue-empty">${t("fetching")}</div>`;
+      }
 
       try {
         await invoke("start_download", {

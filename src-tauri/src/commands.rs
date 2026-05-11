@@ -146,8 +146,9 @@ pub async fn fetch_playlist(
         cmd.args(["--cookies", &cookie_file]);
     }
     if is_tiktok {
-        // --flat-playlist doesn't return thumbnails for TikTok, use --dump-json instead
         cmd.args(["--dump-json"]);
+        // Use TikTok API directly instead of webpage scraping to avoid "Unexpected response" errors
+        cmd.args(["--extractor-args", "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com"]);
     } else {
         cmd.args(["--dump-json", "--flat-playlist"]);
     }
@@ -322,6 +323,7 @@ pub async fn start_download(
                 if settings.no_watermark {
                     cmd.args(["--extractor-args", "tiktok:video_codec=h264"]);
                 }
+                cmd.args(["--extractor-args", "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com"]);
                 cmd.arg(tiktok_url);
                 if let Some(ref p) = settings.proxy {
                     cmd.args(["--proxy", p]);
@@ -588,8 +590,12 @@ pub async fn start_download(
             if !settings.cookie_file.is_empty() {
                 video_cmd.args(["--cookies", &settings.cookie_file]);
             }
-            if settings.is_tiktok && settings.no_watermark {
-                video_cmd.args(["--extractor-args", "tiktok:video_codec=h264"]);
+            if settings.is_tiktok {
+                let mut tiktok_args = String::from("tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com");
+                if settings.no_watermark {
+                    tiktok_args.push_str(";video_codec=h264");
+                }
+                video_cmd.args(["--extractor-args", &tiktok_args]);
             }
             video_cmd
                 .args(["-f", &fmt])

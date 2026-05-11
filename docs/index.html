@@ -1,342 +1,1388 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OmniGrab — Download video. Fast. Private.</title>
-<meta name="description" content="OmniGrab — Tải video YouTube, TikTok. Playlist, Channel, Video đơn. Chỉ với 1 click. Open source, free forever.">
-<meta property="og:title" content="OmniGrab — Download video. Fast. Private.">
-<meta property="og:description" content="YouTube & TikTok downloader. Playlist, channel, single video. 9 formats, parallel downloads, real-time progress.">
-<meta property="og:type" content="website">
-<link rel="icon" href="https://raw.githubusercontent.com/nv-minh/YoutubePlaylistDownloaderApp/main/src-tauri/icons/icon.png">
-<style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --blue:#0066cc;--blue-hover:#0071e3;--blue-on-dark:#2997ff;
-  --ink:#1d1d1f;--ink-muted:#7a7a7a;--ink-muted-80:#333;
-  --canvas:#fff;--parchment:#f5f5f7;
-  --dark-1:#272729;--dark-2:#2a2a2c;--black:#000;
-  --hairline:#e0e0e0;--divider:#f0f0f0;
-  --radius-pill:9999px;--radius-lg:18px;--radius-md:11px;--radius-sm:8px;
-  --section-pad:80px;--max-w:980px;
-}
-html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
-body{font-family:"SF Pro Text",system-ui,-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;font-size:17px;font-weight:400;line-height:1.47;letter-spacing:-0.374px;color:var(--ink);background:var(--canvas);-webkit-font-smoothing:antialiased}
-a{color:var(--blue);text-decoration:none}
-a:hover{text-decoration:underline}
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OmniGrab — Download video. Fast. Private.</title>
+    <meta
+      name="description"
+      content="OmniGrab — Tải video YouTube, TikTok. Playlist, Channel, Video đơn. Chỉ với 1 click. Open source, free forever."
+    />
+    <meta
+      property="og:title"
+      content="OmniGrab — Download video. Fast. Private."
+    />
+    <meta
+      property="og:description"
+      content="YouTube & TikTok downloader. Playlist, channel, single video. 9 formats, parallel downloads, real-time progress."
+    />
+    <meta property="og:type" content="website" />
+    <link
+      rel="icon"
+      href="https://raw.githubusercontent.com/nv-minh/YoutubePlaylistDownloaderApp/main/src-tauri/icons/icon.png"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      :root {
+        --blue: #0066cc;
+        --blue-hover: #0071e3;
+        --blue-on-dark: #2997ff;
+        --ink: #1d1d1f;
+        --ink-muted: #7a7a7a;
+        --ink-muted-80: #333;
+        --canvas: #fff;
+        --parchment: #f5f5f7;
+        --dark-1: #272729;
+        --dark-2: #2a2a2c;
+        --black: #000;
+        --hairline: #e0e0e0;
+        --divider: #f0f0f0;
+        --radius-pill: 9999px;
+        --radius-lg: 18px;
+        --radius-md: 11px;
+        --radius-sm: 8px;
+        --section-pad: 80px;
+        --max-w: 980px;
+        --bg: var(--canvas);
+        --bg-alt: var(--parchment);
+        --bg-nav: rgba(0, 0, 0, 0.82);
+        --text: var(--ink);
+        --text-muted: var(--ink-muted);
+        --text-muted-80: var(--ink-muted-80);
+        --card-bg: var(--canvas);
+        --card-border: var(--hairline);
+        --shadow-hero: rgba(0, 0, 0, 0.22) 3px 5px 30px;
+      }
+      html[data-theme="dark"] {
+        --bg: var(--dark-1);
+        --bg-alt: var(--dark-2);
+        --bg-nav: rgba(0, 0, 0, 0.92);
+        --text: #f5f5f7;
+        --text-muted: #a1a1aa;
+        --text-muted-80: #d1d1d6;
+        --card-bg: rgba(255, 255, 255, 0.04);
+        --card-border: rgba(255, 255, 255, 0.08);
+        --divider: rgba(255, 255, 255, 0.06);
+        --hairline: rgba(255, 255, 255, 0.08);
+        --shadow-hero: rgba(0, 0, 0, 0.5) 3px 5px 40px;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        font-family:
+          "SF Pro Text",
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Helvetica Neue",
+          sans-serif;
+        font-size: 17px;
+        font-weight: 400;
+        line-height: 1.47;
+        letter-spacing: -0.374px;
+        color: var(--text);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        transition:
+          background 0.3s,
+          color 0.3s;
+      }
+      a {
+        color: var(--blue);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
 
-/* ── Nav ────────────────────────────────── */
-.nav{position:sticky;top:0;z-index:100;background:rgba(0,0,0,0.82);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px}
-.nav-logo{display:flex;align-items:center;gap:8px;color:#fff;font-size:14px;font-weight:600;letter-spacing:-0.12px;text-decoration:none}
-.nav-logo svg{width:20px;height:20px}
-.nav-links{display:flex;align-items:center;gap:20px}
-.nav-links a{color:rgba(255,255,255,0.8);font-size:12px;font-weight:400;letter-spacing:-0.12px;text-decoration:none;transition:color 0.2s}
-.nav-links a:hover{color:#fff;text-decoration:none}
-.nav-btn{background:var(--blue);color:#fff;font-size:12px;font-weight:400;padding:6px 14px;border-radius:var(--radius-pill);border:none;cursor:pointer;letter-spacing:-0.12px;transition:background 0.2s}
-.nav-btn:hover{background:var(--blue-hover)}
-.nav-hamburger{display:none;background:none;border:none;color:#fff;cursor:pointer;padding:4px}
-@media(max-width:834px){.nav-links .nav-link-text{display:none}.nav-links{gap:12px}}
+      /* ── Animations ─────────────────────────── */
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(24px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+      }
+      @keyframes scaleIn {
+        from { opacity: 0; transform: scale(0.92); }
+        to   { opacity: 1; transform: scale(1); }
+      }
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(-8px); }
+      }
+      .animate-in {
+        opacity: 0;
+        transform: translateY(24px);
+        transition: opacity 2s cubic-bezier(0.16,1,0.3,1),
+                    transform 2s cubic-bezier(0.16,1,0.3,1);
+      }
+      .animate-in.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
 
-/* ── Hero ────────────────────────────────── */
-.hero{text-align:center;padding:100px 24px var(--section-pad);background:var(--canvas)}
-.hero-badge{display:inline-block;background:var(--parchment);color:var(--ink-muted-80);font-size:12px;font-weight:600;letter-spacing:-0.12px;padding:6px 14px;border-radius:var(--radius-pill);margin-bottom:20px}
-.hero h1{font-family:"SF Pro Display",system-ui,-apple-system,sans-serif;font-size:56px;font-weight:600;line-height:1.07;letter-spacing:-0.28px;color:var(--ink);margin-bottom:16px}
-.hero .lead{font-size:21px;font-weight:400;line-height:1.47;color:var(--ink-muted);max-width:600px;margin:0 auto 32px}
-.hero-ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
-.btn-primary{background:var(--blue);color:#fff;font-size:17px;font-weight:400;padding:11px 22px;border-radius:var(--radius-pill);border:none;cursor:pointer;letter-spacing:-0.374px;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px}
-.btn-primary:hover{background:var(--blue-hover);text-decoration:none;color:#fff}
-.btn-primary:active{transform:scale(0.95)}
-.btn-primary svg{width:18px;height:18px}
-.btn-ghost{background:transparent;color:var(--blue);font-size:17px;font-weight:400;padding:11px 22px;border-radius:var(--radius-pill);border:1px solid var(--blue);cursor:pointer;letter-spacing:-0.374px;transition:all 0.2s;text-decoration:none}
-.btn-ghost:hover{background:rgba(0,102,204,0.06);text-decoration:none}
-.hero-note{font-size:12px;color:var(--ink-muted);letter-spacing:-0.12px}
+      /* Hero entrance */
+      .hero .hero-logo {
+        animation: scaleIn 0.6s cubic-bezier(0.16,1,0.3,1) both;
+      }
+      .hero .hero-badge {
+        animation: fadeUp 0.6s 0.6s cubic-bezier(0.16,1,0.3,1) both;
+      }
+      .hero h1 {
+        animation: fadeUp 0.6s 0.75s cubic-bezier(0.16,1,0.3,1) both;
+      }
+      .hero .lead {
+        animation: fadeUp 0.6s 0.9s cubic-bezier(0.16,1,0.3,1) both;
+      }
+      .hero-ctas {
+        animation: fadeUp 0.6s 1.05s cubic-bezier(0.16,1,0.3,1) both;
+      }
+      .hero-note {
+        animation: fadeUp 0.6s 1.2s cubic-bezier(0.16,1,0.3,1) both;
+      }
 
-/* ── Screenshot ──────────────────────────── */
-.screenshot-section{padding:0 24px var(--section-pad);background:var(--canvas);text-align:center}
-.screenshot-wrap{max-width:860px;margin:0 auto 20px}
-.screenshot-wrap img{width:100%;border-radius:var(--radius-lg);box-shadow:rgba(0,0,0,0.22) 3px 5px 30px;display:block}
-.screenshot-caption{font-size:17px;color:var(--ink-muted);letter-spacing:-0.374px}
+      /* Screenshot hover */
+      .screenshot-wrap img {
+        transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
+      }
+      .screenshot-wrap:hover img {
+        transform: scale(1.02);
+      }
 
-/* ── Features ────────────────────────────── */
-.features{background:var(--parchment);padding:var(--section-pad) 24px}
-.section-inner{max-width:var(--max-w);margin:0 auto}
-.section-title{font-family:"SF Pro Display",system-ui,-apple-system,sans-serif;font-size:40px;font-weight:600;line-height:1.1;text-align:center;margin-bottom:48px;letter-spacing:0}
-.features-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-.feature-card{background:var(--canvas);border:1px solid var(--hairline);border-radius:var(--radius-lg);padding:24px;transition:border-color 0.2s}
-.feature-card:hover{border-color:var(--blue)}
-.feature-icon{width:32px;height:32px;margin-bottom:12px;color:var(--blue)}
-.feature-card h3{font-size:15px;font-weight:600;line-height:1.29;letter-spacing:-0.224px;margin-bottom:4px}
-.feature-card p{font-size:14px;font-weight:400;line-height:1.43;color:var(--ink-muted);letter-spacing:-0.224px}
+      /* Card hover lift */
+      .feature-card {
+        transition: transform 0.3s cubic-bezier(0.16,1,0.3,1),
+                    border-color 0.2s,
+                    box-shadow 0.3s;
+      }
+      .feature-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+      }
+      html[data-theme="dark"] .feature-card:hover {
+        box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+      }
 
-/* ── How it works ────────────────────────── */
-.howto{background:var(--dark-1);color:#fff;padding:var(--section-pad) 24px;text-align:center}
-.howto .section-title{color:#fff}
-.steps{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
-.step{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:var(--radius-lg);padding:32px 24px;flex:1;min-width:200px;max-width:280px;text-align:center}
-.step-num{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--blue);color:#fff;font-size:15px;font-weight:600;margin-bottom:16px}
-.step h3{font-size:17px;font-weight:600;line-height:1.29;letter-spacing:-0.224px;margin-bottom:6px}
-.step p{font-size:14px;color:rgba(255,255,255,0.6);line-height:1.43;letter-spacing:-0.224px}
+      /* Platform card hover */
+      .platform-card {
+        transition: transform 0.3s cubic-bezier(0.16,1,0.3,1),
+                    border-color 0.2s,
+                    box-shadow 0.3s;
+      }
+      .platform-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+      }
+      html[data-theme="dark"] .platform-card:hover {
+        box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      }
 
-/* ── Download ────────────────────────────── */
-.download{background:var(--canvas);padding:var(--section-pad) 24px;text-align:center}
-.platforms-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;max-width:800px;margin:0 auto}
-.platform-card{border:1px solid var(--hairline);border-radius:var(--radius-lg);padding:24px 16px;cursor:pointer;transition:all 0.2s;text-decoration:none;color:var(--ink);display:block}
-.platform-card:hover{border-color:var(--blue);text-decoration:none;transform:translateY(-2px)}
-.platform-card.recommended{border-color:var(--blue);background:rgba(0,102,204,0.03)}
-.platform-card .rec-badge{font-size:10px;font-weight:600;color:var(--blue);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px}
-.platform-icon{width:36px;height:36px;margin:0 auto 12px;display:block;color:var(--ink)}
-.platform-card h3{font-size:14px;font-weight:600;letter-spacing:-0.224px;margin-bottom:4px}
-.platform-card p{font-size:12px;color:var(--ink-muted);letter-spacing:-0.12px}
+      /* Step card hover */
+      .step {
+        transition: transform 0.3s cubic-bezier(0.16,1,0.3,1),
+                    background 0.3s;
+      }
+      .step:hover {
+        transform: translateY(-4px);
+        background: rgba(255,255,255,0.1);
+      }
 
-/* ── Privacy ─────────────────────────────── */
-.privacy{background:var(--parchment);padding:48px 24px;text-align:center}
-.privacy-inner{max-width:600px;margin:0 auto;display:flex;align-items:center;gap:16px;text-align:left}
-.privacy-icon{width:40px;height:40px;flex-shrink:0;color:var(--blue)}
-.privacy p{font-size:15px;line-height:1.47;color:var(--ink-muted-80)}
+      /* Nav links underline */
+      .nav-links a {
+        position: relative;
+      }
+      .nav-links a::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 50%;
+        width: 0;
+        height: 1px;
+        background: #fff;
+        transition: width 0.3s, left 0.3s;
+      }
+      .nav-links a:hover::after {
+        width: 100%;
+        left: 0;
+      }
 
-/* ── Footer ──────────────────────────────── */
-.footer{background:var(--parchment);border-top:1px solid var(--divider);padding:32px 24px;text-align:center}
-.footer-links{display:flex;gap:20px;justify-content:center;margin-bottom:12px}
-.footer-links a{font-size:12px;color:var(--ink-muted-80);letter-spacing:-0.12px}
-.footer-copy{font-size:12px;color:var(--ink-muted);letter-spacing:-0.12px}
+      /* Button glow */
+      .btn-primary:hover {
+        box-shadow: 0 4px 20px rgba(0,102,204,0.35);
+      }
 
-/* ── Responsive ──────────────────────────── */
-@media(max-width:1068px){
-  .hero h1{font-size:40px}
-  .platforms-grid{grid-template-columns:repeat(2,1fr)}
-}
-@media(max-width:834px){
-  .nav-hamburger{display:block}
-  .hero h1{font-size:34px}
-  .hero .lead{font-size:17px}
-  .features-grid{grid-template-columns:1fr}
-  .steps{flex-direction:column;align-items:center}
-  .platforms-grid{grid-template-columns:repeat(2,1fr)}
-  :root{--section-pad:48px}
-}
-@media(max-width:640px){
-  .hero h1{font-size:28px}
-  .platforms-grid{grid-template-columns:1fr}
-  .privacy-inner{flex-direction:column;text-align:center}
-}
-</style>
-</head>
-<body>
+      /* ── Theme toggle ────────────────────────── */
+      .theme-toggle {
+        background: none;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.8);
+        cursor: pointer;
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: -0.12px;
+        transition: all 0.2s;
+      }
+      .theme-toggle:hover {
+        border-color: rgba(255, 255, 255, 0.5);
+        color: #fff;
+      }
+      .theme-toggle:active {
+        transform: scale(0.95);
+      }
+      .theme-toggle svg {
+        width: 14px;
+        height: 14px;
+      }
+      html[data-theme="dark"] .icon-sun {
+        display: block;
+      }
+      html[data-theme="dark"] .icon-moon {
+        display: none;
+      }
+      .icon-sun {
+        display: none;
+      }
 
-<!-- Nav -->
-<nav class="nav">
-  <a href="#" class="nav-logo">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    OmniGrab
-  </a>
-  <div class="nav-links">
-    <a href="#features" class="nav-link-text">Features</a>
-    <a href="#download" class="nav-link-text">Download</a>
-    <a href="https://github.com/nv-minh/YoutubePlaylistDownloaderApp" target="_blank" class="nav-link-text">GitHub</a>
-    <button class="nav-btn" onclick="document.getElementById('download').scrollIntoView({behavior:'smooth'})">Download</button>
-  </div>
-</nav>
+      /* ── Nav ────────────────────────────────── */
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: var(--bg-nav);
+        backdrop-filter: saturate(180%) blur(20px);
+        -webkit-backdrop-filter: saturate(180%) blur(20px);
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+      }
+      .nav-logo {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.12px;
+        text-decoration: none;
+      }
+      .nav-logo .app-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+      }
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+      .nav-links a {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
+        font-weight: 400;
+        letter-spacing: -0.12px;
+        text-decoration: none;
+        transition: color 0.2s;
+      }
+      .nav-links a:hover {
+        color: #fff;
+        text-decoration: none;
+      }
+      .nav-btn {
+        background: var(--blue);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 400;
+        padding: 6px 14px;
+        border-radius: var(--radius-pill);
+        border: none;
+        cursor: pointer;
+        letter-spacing: -0.12px;
+        transition: background 0.2s;
+      }
+      .nav-btn:hover {
+        background: var(--blue-hover);
+      }
+      .nav-hamburger {
+        display: none;
+        background: none;
+        border: none;
+        color: #fff;
+        cursor: pointer;
+        padding: 4px;
+      }
+      @media (max-width: 834px) {
+        .nav-links .nav-link-text {
+          display: none;
+        }
+        .nav-links {
+          gap: 12px;
+        }
+      }
 
-<!-- Hero -->
-<section class="hero">
-  <div class="hero-badge">Open source &amp; free forever</div>
-  <h1>Download video.<br>Fast. Private.</h1>
-  <p class="lead">YouTube playlists, channels, TikTok videos — 9 formats, parallel downloads, real-time progress. All in one lightweight app.</p>
-  <div class="hero-ctas">
-    <a class="btn-primary" id="hero-btn" href="#download">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      Download for Mac
-    </a>
-    <a class="btn-ghost" href="#download">All platforms</a>
-  </div>
-  <p class="hero-note">Available for macOS, Windows &amp; Linux · ~4MB · No account needed</p>
-</section>
+      /* ── Hero ────────────────────────────────── */
+      .hero {
+        text-align: center;
+        padding: 100px 24px var(--section-pad);
+        background: var(--bg);
+      }
+      .hero-logo {
+        margin-bottom: 24px;
+        border-radius: 18px;
+      }
+      .hero-badge {
+        display: inline-block;
+        background: var(--bg-alt);
+        color: var(--text-muted-80);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: -0.12px;
+        padding: 6px 14px;
+        border-radius: var(--radius-pill);
+        margin-bottom: 20px;
+      }
+      .hero h1 {
+        font-family:
+          "SF Pro Display",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 56px;
+        font-weight: 600;
+        line-height: 1.07;
+        letter-spacing: -0.28px;
+        color: var(--text);
+        margin-bottom: 16px;
+      }
+      .hero .lead {
+        font-size: 21px;
+        font-weight: 400;
+        line-height: 1.47;
+        color: var(--text-muted);
+        max-width: 600px;
+        margin: 0 auto 32px;
+      }
+      .hero-ctas {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .btn-primary {
+        background: var(--blue);
+        color: #fff;
+        font-size: 17px;
+        font-weight: 400;
+        padding: 11px 22px;
+        border-radius: var(--radius-pill);
+        border: none;
+        cursor: pointer;
+        letter-spacing: -0.374px;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn-primary:hover {
+        background: var(--blue-hover);
+        text-decoration: none;
+        color: #fff;
+      }
+      .btn-primary:active {
+        transform: scale(0.95);
+      }
+      .btn-primary svg {
+        width: 18px;
+        height: 18px;
+      }
+      .btn-ghost {
+        background: transparent;
+        color: var(--blue);
+        font-size: 17px;
+        font-weight: 400;
+        padding: 11px 22px;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--blue);
+        cursor: pointer;
+        letter-spacing: -0.374px;
+        transition: all 0.2s;
+        text-decoration: none;
+      }
+      .btn-ghost:hover {
+        background: rgba(0, 102, 204, 0.08);
+        text-decoration: none;
+      }
+      .hero-note {
+        font-size: 12px;
+        color: var(--text-muted);
+        letter-spacing: -0.12px;
+      }
 
-<!-- Screenshot -->
-<section class="screenshot-section">
-  <div class="screenshot-wrap">
-    <img src="https://raw.githubusercontent.com/nv-minh/YoutubePlaylistDownloaderApp/main/screenshot.png" alt="OmniGrab app screenshot" onerror="this.style.display='none'">
-  </div>
-  <p class="screenshot-caption">Paste a link. Pick videos. Download.</p>
-</section>
+      /* ── Screenshot ──────────────────────────── */
+      .screenshot-section {
+        padding: 0 24px var(--section-pad);
+        background: var(--bg);
+        text-align: center;
+      }
+      .screenshot-wrap {
+        max-width: 860px;
+        margin: 0 auto 20px;
+      }
+      .screenshot-wrap img {
+        width: 100%;
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-hero);
+        display: block;
+      }
+      .screenshot-caption {
+        font-size: 17px;
+        color: var(--text-muted);
+        letter-spacing: -0.374px;
+      }
 
-<!-- Features -->
-<section class="features" id="features">
-  <div class="section-inner">
-    <h2 class="section-title">Everything you need</h2>
-    <div class="features-grid">
+      /* ── Features ────────────────────────────── */
+      .features {
+        background: var(--bg-alt);
+        padding: var(--section-pad) 24px;
+      }
+      .section-inner {
+        max-width: var(--max-w);
+        margin: 0 auto;
+      }
+      .section-title {
+        font-family:
+          "SF Pro Display",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 40px;
+        font-weight: 600;
+        line-height: 1.1;
+        text-align: center;
+        margin-bottom: 48px;
+        letter-spacing: 0;
+        color: var(--text);
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+      .feature-card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        transition: border-color 0.2s;
+      }
+      .feature-card:hover {
+        border-color: var(--blue);
+      }
+      .feature-icon {
+        width: 32px;
+        height: 32px;
+        margin-bottom: 12px;
+        color: var(--blue);
+      }
+      .feature-card h3 {
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.29;
+        letter-spacing: -0.224px;
+        margin-bottom: 4px;
+        color: var(--text);
+      }
+      .feature-card p {
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 1.43;
+        color: var(--text-muted);
+        letter-spacing: -0.224px;
+      }
 
-      <div class="feature-card">
-        <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        <h3>YouTube Playlist &amp; Channel</h3>
-        <p>Download full playlists, channels, or single videos. Paste any YouTube URL.</p>
-      </div>
+      /* ── How it works ────────────────────────── */
+      .howto {
+        background: var(--dark-1);
+        color: #fff;
+        padding: var(--section-pad) 24px;
+        text-align: center;
+      }
+      .howto .section-title {
+        color: #fff;
+      }
+      .steps {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .step {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-lg);
+        padding: 32px 24px;
+        flex: 1;
+        min-width: 200px;
+        max-width: 280px;
+        text-align: center;
+      }
+      .step-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--blue);
+        color: #fff;
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 16px;
+      }
+      .step h3 {
+        font-size: 17px;
+        font-weight: 600;
+        line-height: 1.29;
+        letter-spacing: -0.224px;
+        margin-bottom: 6px;
+      }
+      .step p {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.6);
+        line-height: 1.43;
+        letter-spacing: -0.224px;
+      }
 
-      <div class="feature-card">
-        <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12a4 4 0 108 0 4 4 0 00-8 0z"/><path d="M16 8v2a2 2 0 004 0V8a8 8 0 10-16 0v2"/><circle cx="12" cy="12" r="1"/></svg>
-        <h3>TikTok — No Watermark</h3>
-        <p>Download TikTok videos watermark-free. Paste user profile to grab all videos.</p>
-      </div>
+      /* ── Download ────────────────────────────── */
+      .download {
+        background: var(--bg);
+        padding: var(--section-pad) 24px;
+        text-align: center;
+      }
+      .platforms-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      .platform-card {
+        border: 1px solid var(--card-border);
+        border-radius: var(--radius-lg);
+        padding: 24px 16px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        color: var(--text);
+        display: block;
+        background: var(--card-bg);
+      }
+      .platform-card:hover {
+        border-color: var(--blue);
+        text-decoration: none;
+        transform: translateY(-2px);
+      }
+      .platform-card.recommended {
+        border-color: var(--blue);
+        background: rgba(0, 102, 204, 0.06);
+      }
+      .platform-card .rec-badge {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--blue);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 8px;
+      }
+      .platform-icon {
+        width: 36px;
+        height: 36px;
+        margin: 0 auto 12px;
+        display: block;
+        color: var(--text);
+      }
+      .platform-card h3 {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.224px;
+        margin-bottom: 4px;
+      }
+      .platform-card p {
+        font-size: 12px;
+        color: var(--text-muted);
+        letter-spacing: -0.12px;
+      }
 
-      <div class="feature-card">
-        <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <h3>Real-time Progress</h3>
-        <p>Live speed, ETA, and file size per video. Track every download in real time.</p>
-      </div>
+      /* ── Privacy ─────────────────────────────── */
+      .privacy {
+        background: var(--bg-alt);
+        padding: 48px 24px;
+        text-align: center;
+      }
+      .privacy-inner {
+        max-width: 600px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        text-align: left;
+      }
+      .privacy-icon {
+        width: 40px;
+        height: 40px;
+        flex-shrink: 0;
+        color: var(--blue);
+      }
+      .privacy p {
+        font-size: 15px;
+        line-height: 1.47;
+        color: var(--text-muted-80);
+      }
 
-      <div class="feature-card">
-        <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h4v6H4z"/><path d="M10 10h4v10h-4z"/><path d="M16 6h4v14h-4z"/></svg>
-        <h3>Parallel Downloads</h3>
-        <p>1–5 simultaneous downloads. Configurable concurrency for maximum speed.</p>
-      </div>
+      /* ── Footer ──────────────────────────────── */
+      .footer {
+        background: var(--bg-alt);
+        border-top: 1px solid var(--divider);
+        padding: 32px 24px;
+        text-align: center;
+      }
+      .footer-links {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-bottom: 12px;
+      }
+      .footer-links a {
+        font-size: 12px;
+        color: var(--text-muted-80);
+        letter-spacing: -0.12px;
+      }
+      .footer-copy {
+        font-size: 12px;
+        color: var(--text-muted);
+        letter-spacing: -0.12px;
+      }
 
-      <div class="feature-card">
-        <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-        <h3>9 Output Formats</h3>
-        <p>MP4, MP3, WebM, MKV, AVI, FLAC, WAV, OGG, M4A. Best to 480p quality.</p>
-      </div>
-
-      <div class="feature-card">
-        <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-        <h3>Private Content</h3>
-        <p>Access private and members-only playlists with browser cookies. 4-step guide included.</p>
-      </div>
-
-      <div class="feature-card">
-        <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-        <h3>Comments &amp; Subtitles</h3>
-        <p>Download comments (HTML/JSON/CSV) and subtitles in 15+ languages.</p>
-      </div>
-
-      <div class="feature-card">
-        <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-        <h3>Light/Dark + 15 Languages</h3>
-        <p>Apple-inspired light and dark theme. UI in Vietnamese, English, Arabic, Chinese, and 11 more.</p>
-      </div>
-
-    </div>
-  </div>
-</section>
-
-<!-- How it works -->
-<section class="howto">
-  <div class="section-inner">
-    <h2 class="section-title">How it works</h2>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <h3>Paste a URL</h3>
-        <p>YouTube playlist, channel, or TikTok link</p>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <h3>Pick videos</h3>
-        <p>Select videos, quality, and format</p>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <h3>Download</h3>
-        <p>Hit download. Watch progress in real time.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Download -->
-<section class="download" id="download">
-  <div class="section-inner">
-    <h2 class="section-title">Download OmniGrab</h2>
-    <div class="platforms-grid" id="platforms-grid">
-
-      <a class="platform-card" id="dl-mac-arm" href="#">
-        <div class="rec-badge" id="rec-arm" style="display:none">Recommended</div>
-        <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 6v6l4 2"/></svg>
-        <h3>macOS Apple Silicon</h3>
-        <p>M1/M2/M3/M4 · .dmg</p>
+      /* ── Responsive ──────────────────────────── */
+      @media (max-width: 1068px) {
+        .hero h1 {
+          font-size: 40px;
+        }
+        .platforms-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 834px) {
+        .nav-hamburger {
+          display: block;
+        }
+        .hero h1 {
+          font-size: 34px;
+        }
+        .hero .lead {
+          font-size: 17px;
+        }
+        .features-grid {
+          grid-template-columns: 1fr;
+        }
+        .steps {
+          flex-direction: column;
+          align-items: center;
+        }
+        .platforms-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        :root {
+          --section-pad: 48px;
+        }
+      }
+      @media (max-width: 640px) {
+        .hero h1 {
+          font-size: 28px;
+        }
+        .platforms-grid {
+          grid-template-columns: 1fr;
+        }
+        .privacy-inner {
+          flex-direction: column;
+          text-align: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Nav -->
+    <nav class="nav">
+      <a href="#" class="nav-logo">
+        <svg class="app-icon" viewBox="0 0 512 512" fill="none">
+          <defs>
+            <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FF5F6D" />
+              <stop offset="100%" stop-color="#FFC371" />
+            </linearGradient>
+            <linearGradient id="g2" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#EF5350" />
+              <stop offset="100%" stop-color="#C62828" />
+            </linearGradient>
+          </defs>
+          <rect
+            x="130"
+            y="80"
+            width="250"
+            height="120"
+            rx="30"
+            fill="#B71C1C"
+          />
+          <rect
+            x="90"
+            y="140"
+            width="330"
+            height="150"
+            rx="35"
+            fill="#D32F2F"
+          />
+          <rect
+            x="40"
+            y="220"
+            width="432"
+            height="250"
+            rx="45"
+            fill="url(#g2)"
+          />
+          <path
+            d="M210 295V395L295 345L210 295Z"
+            fill="white"
+            stroke="white"
+            stroke-width="10"
+            stroke-linejoin="round"
+          />
+        </svg>
+        OmniGrab
       </a>
+      <div class="nav-links">
+        <a href="#features" class="nav-link-text">Features</a>
+        <a href="#download" class="nav-link-text">Download</a>
+        <a
+          href="https://github.com/nv-minh/YoutubePlaylistDownloaderApp"
+          target="_blank"
+          class="nav-link-text"
+          >GitHub</a
+        >
+        <button class="theme-toggle" id="theme-toggle" title="Toggle theme">
+          <svg
+            class="icon-moon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+          </svg>
+          <svg
+            class="icon-sun"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+        </button>
+        <button
+          class="nav-btn"
+          onclick="
+            document
+              .getElementById('download')
+              .scrollIntoView({ behavior: 'smooth' })
+          "
+        >
+          Download
+        </button>
+      </div>
+    </nav>
 
-      <a class="platform-card" id="dl-mac-intel" href="#">
-        <div class="rec-badge" id="rec-intel" style="display:none">Recommended</div>
-        <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 6v6l4 2"/></svg>
-        <h3>macOS Intel</h3>
-        <p>Intel Core · .dmg</p>
-      </a>
+    <!-- Hero -->
+    <section class="hero">
+      <svg
+        style="
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          width: 100%;
+        "
+        class="hero-logo"
+        viewBox="0 0 512 512"
+        fill="none"
+        width="80"
+        height="80"
+      >
+        <defs>
+          <linearGradient id="hg1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#FF5F6D" />
+            <stop offset="100%" stop-color="#FFC371" />
+          </linearGradient>
+          <linearGradient id="hg2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#EF5350" />
+            <stop offset="100%" stop-color="#C62828" />
+          </linearGradient>
+        </defs>
+        <rect x="130" y="80" width="250" height="120" rx="30" fill="#B71C1C" />
+        <rect x="90" y="140" width="330" height="150" rx="35" fill="#D32F2F" />
+        <rect
+          x="40"
+          y="220"
+          width="432"
+          height="250"
+          rx="45"
+          fill="url(#hg2)"
+        />
+        <path
+          d="M210 295V395L295 345L210 295Z"
+          fill="white"
+          stroke="white"
+          stroke-width="10"
+          stroke-linejoin="round"
+        />
+      </svg>
+      <div class="hero-badge">Open source &amp; free forever</div>
+      <h1>Download video.<br />Fast. Private.</h1>
+      <p class="lead">
+        YouTube playlists, channels, TikTok videos — 9 formats, parallel
+        downloads, real-time progress. All in one lightweight app.
+      </p>
+      <div class="hero-ctas">
+        <a class="btn-primary" id="hero-btn" href="#download">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Download for Mac
+        </a>
+        <a class="btn-ghost" href="#download">All platforms</a>
+      </div>
+      <p class="hero-note">
+        Available for macOS, Windows &amp; Linux · ~4MB · No account needed
+      </p>
+    </section>
 
-      <a class="platform-card" id="dl-windows" href="#">
-        <div class="rec-badge" id="rec-win" style="display:none">Recommended</div>
-        <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="8" y1="21" x2="8" y2="9"/></svg>
-        <h3>Windows</h3>
-        <p>64-bit · .exe installer</p>
-      </a>
+    <!-- Screenshot -->
+    <section class="screenshot-section">
+      <div class="screenshot-wrap">
+        <img
+          src="https://raw.githubusercontent.com/nv-minh/YoutubePlaylistDownloaderApp/main/screenshot.png"
+          alt="OmniGrab app screenshot"
+          onerror="this.style.display = 'none'"
+        />
+      </div>
+      <p class="screenshot-caption">Paste a link. Pick videos. Download.</p>
+    </section>
 
-      <a class="platform-card" id="dl-linux" href="#">
-        <div class="rec-badge" id="rec-linux" style="display:none">Recommended</div>
-        <svg class="platform-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-        <h3>Ubuntu / Debian</h3>
-        <p>64-bit · .deb</p>
-      </a>
+    <!-- Features -->
+    <section class="features" id="features">
+      <div class="section-inner">
+        <h2 class="section-title">Everything you need</h2>
+        <div class="features-grid">
+          <div class="feature-card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            <h3>YouTube Playlist &amp; Channel</h3>
+            <p>
+              Download full playlists, channels, or single videos. Paste any
+              YouTube URL.
+            </p>
+          </div>
 
-    </div>
-    <p style="margin-top:24px;font-size:12px;color:var(--ink-muted);letter-spacing:-0.12px">Also requires: <a href="https://ffmpeg.org/download.html" target="_blank">FFmpeg</a> (for metadata/subtitles) · yt-dlp (auto-installed)</p>
-  </div>
-</section>
+          <div class="feature-card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M9 12a4 4 0 108 0 4 4 0 00-8 0z" />
+              <path d="M16 8v2a2 2 0 004 0V8a8 8 0 10-16 0v2" />
+              <circle cx="12" cy="12" r="1" />
+            </svg>
+            <h3>TikTok — No Watermark</h3>
+            <p>
+              Download TikTok videos watermark-free. Paste user profile to grab
+              all videos.
+            </p>
+          </div>
 
-<!-- Privacy -->
-<section class="privacy">
-  <div class="privacy-inner">
-    <svg class="privacy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="12" cy="16" r="1"/></svg>
-    <p><strong>Your data stays yours.</strong> Cookies are stored locally and never sent to any server except YouTube/TikTok. Cookie files are automatically deleted after download. Fully open source for audit.</p>
-  </div>
-</section>
+          <div class="feature-card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <h3>Real-time Progress</h3>
+            <p>
+              Live speed, ETA, and file size per video. Track every download in
+              real time.
+            </p>
+          </div>
 
-<!-- Footer -->
-<footer class="footer">
-  <div class="footer-links">
-    <a href="https://github.com/nv-minh/YoutubePlaylistDownloaderApp" target="_blank">GitHub</a>
-    <a href="https://github.com/nv-minh/YoutubePlaylistDownloaderApp/blob/main/README.md" target="_blank">Documentation</a>
-    <a href="https://github.com/nv-minh/YoutubePlaylistDownloaderApp/releases" target="_blank">Releases</a>
-  </div>
-  <p class="footer-copy">&copy; 2026 OmniGrab. MIT License.</p>
-</footer>
+          <div class="feature-card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 14h4v6H4z" />
+              <path d="M10 10h4v10h-4z" />
+              <path d="M16 6h4v14h-4z" />
+            </svg>
+            <h3>Parallel Downloads</h3>
+            <p>
+              1–5 simultaneous downloads. Configurable concurrency for maximum
+              speed.
+            </p>
+          </div>
 
-<script>
-(function(){
-  // OS detection
-  var ua=navigator.userAgent;
-  var os='unknown';
-  if(ua.match(/Mac OS X.*Arm|Macintosh.*Apple/))os='mac-arm';
-  else if(ua.match(/Mac OS X/))os='mac-intel';
-  else if(ua.match(/Windows/))os='windows';
-  else if(ua.match(/Linux/))os='linux';
+          <div class="feature-card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+              />
+            </svg>
+            <h3>9 Output Formats</h3>
+            <p>
+              MP4, MP3, WebM, MKV, AVI, FLAC, WAV, OGG, M4A. Best to 480p
+              quality.
+            </p>
+          </div>
 
-  // Hero button text
-  var btn=document.getElementById('hero-btn');
-  var labels={'mac-arm':'Download for Mac','mac-intel':'Download for Mac','windows':'Download for Windows','linux':'Download for Linux'};
-  if(labels[os])btn.innerHTML=btn.innerHTML.replace('Download for Mac',labels[os]);
+          <div class="feature-card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0110 0v4" />
+            </svg>
+            <h3>Private Content</h3>
+            <p>
+              Access private and members-only playlists with browser cookies.
+              4-step guide included.
+            </p>
+          </div>
 
-  // Recommended badges
-  var recMap={'mac-arm':'rec-arm','mac-intel':'rec-intel','windows':'rec-win','linux':'rec-linux'};
-  if(recMap[os]){var b=document.getElementById(recMap[os]);if(b)b.style.display='block';var c=document.getElementById({'mac-arm':'dl-mac-arm','mac-intel':'dl-mac-intel','windows':'dl-windows','linux':'dl-linux'}[os]);if(c)c.classList.add('recommended')}
+          <div class="feature-card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+              />
+            </svg>
+            <h3>Comments &amp; Subtitles</h3>
+            <p>
+              Download comments (HTML/JSON/CSV) and subtitles in 15+ languages.
+            </p>
+          </div>
 
-  // Fetch latest release assets
-  fetch('https://api.github.com/repos/nv-minh/YoutubePlaylistDownloaderApp/releases/latest')
-    .then(function(r){return r.json()})
-    .then(function(rel){
-      var assets=rel.assets||[];
-      var map={
-        'dl-mac-arm':function(a){return a.name.match(/aarch64.*\.dmg/i)},
-        'dl-mac-intel':function(a){return a.name.match(/x86_64.*\.dmg|_x64.*\.dmg/i)&&!a.name.match(/aarch64/)},
-        'dl-windows':function(a){return a.name.match(/x64.*\.exe/i)},
-        'dl-linux':function(a){return a.name.match(/amd64.*\.deb/i)}
-      };
-      Object.keys(map).forEach(function(id){
-        var el=document.getElementById(id);
-        var asset=assets.find(map[id]);
-        if(asset&&el)el.href=asset.browser_download_url;
-      });
-    })
-    .catch(function(){});
-})();
-</script>
-</body>
+          <div class="feature-card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+            <h3>Light/Dark + 15 Languages</h3>
+            <p>
+              Apple-inspired light and dark theme. UI in Vietnamese, English,
+              Arabic, Chinese, and 11 more.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="howto">
+      <div class="section-inner">
+        <h2 class="section-title">How it works</h2>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <h3>Paste a URL</h3>
+            <p>YouTube playlist, channel, or TikTok link</p>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <h3>Pick videos</h3>
+            <p>Select videos, quality, and format</p>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <h3>Download</h3>
+            <p>Hit download. Watch progress in real time.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download -->
+    <section class="download" id="download">
+      <div class="section-inner">
+        <h2 class="section-title">Download OmniGrab</h2>
+        <div class="platforms-grid" id="platforms-grid">
+          <a class="platform-card" id="dl-mac-arm" href="#">
+            <div class="rec-badge" id="rec-arm" style="display: none">
+              Recommended
+            </div>
+            <!-- Apple logo -->
+            <svg class="platform-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"
+              />
+            </svg>
+            <h3>macOS Apple Silicon</h3>
+            <p>M1/M2/M3/M4 · .dmg</p>
+          </a>
+
+          <a class="platform-card" id="dl-mac-intel" href="#">
+            <div class="rec-badge" id="rec-intel" style="display: none">
+              Recommended
+            </div>
+            <!-- Apple logo -->
+            <svg class="platform-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"
+              />
+            </svg>
+            <h3>macOS Intel</h3>
+            <p>Intel Core · .dmg</p>
+          </a>
+
+          <a class="platform-card" id="dl-windows" href="#">
+            <div class="rec-badge" id="rec-win" style="display: none">
+              Recommended
+            </div>
+            <!-- Windows logo -->
+            <svg class="platform-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path
+                d="M3 12V6.75l8-1.25V12H3zm0 .5h8v6.5l-8-1.25V12.5zM11.5 5.38l9.5-1.63V12h-9.5V5.38zm0 7.12h9.5v8.25l-9.5-1.63V12.5z"
+              />
+            </svg>
+            <h3>Windows</h3>
+            <p>64-bit · .exe installer</p>
+          </a>
+
+          <a class="platform-card" id="dl-linux" href="#">
+            <div class="rec-badge" id="rec-linux" style="display: none">
+              Recommended
+            </div>
+            <!-- Ubuntu logo -->
+            <svg class="platform-icon" viewBox="0 0 24 24" fill="currentColor">
+              <circle
+                cx="12"
+                cy="12"
+                r="10.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1"
+              />
+              <circle cx="12" cy="5.25" r="1.75" />
+              <circle cx="6.1" cy="15.75" r="1.75" />
+              <circle cx="17.9" cy="15.75" r="1.75" />
+              <path
+                d="M17.13 14.56a6.5 6.5 0 0 1-4.63 3.62"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+              <path
+                d="M11.5 18.18a6.5 6.5 0 0 1-4.63-3.62"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+              <path
+                d="M6.87 9.44a6.5 6.5 0 0 1 4.63-3.62"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+              <path
+                d="M12.5 5.82a6.5 6.5 0 0 1 4.63 3.62"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+            </svg>
+            <h3>Ubuntu / Debian</h3>
+            <p>64-bit · .deb</p>
+          </a>
+        </div>
+        <p
+          style="
+            margin-top: 24px;
+            font-size: 12px;
+            color: var(--ink-muted);
+            letter-spacing: -0.12px;
+          "
+        >
+          Also requires:
+          <a href="https://ffmpeg.org/download.html" target="_blank">FFmpeg</a>
+          (for metadata/subtitles) · yt-dlp (auto-installed)
+        </p>
+      </div>
+    </section>
+
+    <!-- Privacy -->
+    <section class="privacy">
+      <div class="privacy-inner">
+        <svg
+          class="privacy-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <rect x="3" y="11" width="18" height="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0110 0v4" />
+          <circle cx="12" cy="16" r="1" />
+        </svg>
+        <p>
+          <strong>Your data stays yours.</strong> Cookies are stored locally and
+          never sent to any server except YouTube/TikTok. Cookie files are
+          automatically deleted after download. Fully open source for audit.
+        </p>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-links">
+        <a
+          href="https://github.com/nv-minh/YoutubePlaylistDownloaderApp"
+          target="_blank"
+          >GitHub</a
+        >
+        <a
+          href="https://github.com/nv-minh/YoutubePlaylistDownloaderApp/blob/main/README.md"
+          target="_blank"
+          >Documentation</a
+        >
+        <a
+          href="https://github.com/nv-minh/YoutubePlaylistDownloaderApp/releases"
+          target="_blank"
+          >Releases</a
+        >
+      </div>
+      <p class="footer-copy">&copy; 2026 OmniGrab. MIT License.</p>
+    </footer>
+
+    <script>
+      (function () {
+        // Theme
+        var saved = localStorage.getItem("og-theme");
+        if (
+          saved === "dark" ||
+          (!saved && window.matchMedia("(prefers-color-scheme:dark)").matches)
+        ) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+        document
+          .getElementById("theme-toggle")
+          .addEventListener("click", function () {
+            var cur = document.documentElement.getAttribute("data-theme");
+            var next = cur === "dark" ? "light" : "dark";
+            document.documentElement.setAttribute("data-theme", next);
+            localStorage.setItem("og-theme", next);
+          });
+
+        // OS detection
+        var ua = navigator.userAgent;
+        var os = "unknown";
+        if (ua.match(/Mac OS X.*Arm|Macintosh.*Apple/)) os = "mac-arm";
+        else if (ua.match(/Mac OS X/)) os = "mac-intel";
+        else if (ua.match(/Windows/)) os = "windows";
+        else if (ua.match(/Linux/)) os = "linux";
+
+        // Hero button text
+        var btn = document.getElementById("hero-btn");
+        var labels = {
+          "mac-arm": "Download for Mac",
+          "mac-intel": "Download for Mac",
+          windows: "Download for Windows",
+          linux: "Download for Linux",
+        };
+        if (labels[os])
+          btn.innerHTML = btn.innerHTML.replace("Download for Mac", labels[os]);
+
+        // Recommended badges
+        var recMap = {
+          "mac-arm": "rec-arm",
+          "mac-intel": "rec-intel",
+          windows: "rec-win",
+          linux: "rec-linux",
+        };
+        if (recMap[os]) {
+          var b = document.getElementById(recMap[os]);
+          if (b) b.style.display = "block";
+          var c = document.getElementById(
+            {
+              "mac-arm": "dl-mac-arm",
+              "mac-intel": "dl-mac-intel",
+              windows: "dl-windows",
+              linux: "dl-linux",
+            }[os],
+          );
+          if (c) c.classList.add("recommended");
+        }
+
+        // Fetch latest release assets
+        fetch(
+          "https://api.github.com/repos/nv-minh/YoutubePlaylistDownloaderApp/releases/latest",
+        )
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (rel) {
+            var assets = rel.assets || [];
+            var map = {
+              "dl-mac-arm": function (a) {
+                return a.name.match(/aarch64.*\.dmg/i);
+              },
+              "dl-mac-intel": function (a) {
+                return (
+                  a.name.match(/x86_64.*\.dmg|_x64.*\.dmg/i) &&
+                  !a.name.match(/aarch64/)
+                );
+              },
+              "dl-windows": function (a) {
+                return a.name.match(/x64.*\.exe/i);
+              },
+              "dl-linux": function (a) {
+                return a.name.match(/amd64.*\.deb/i);
+              },
+            };
+            Object.keys(map).forEach(function (id) {
+              var el = document.getElementById(id);
+              var asset = assets.find(map[id]);
+              if (asset && el) el.href = asset.browser_download_url;
+            });
+          })
+          .catch(function () {});
+
+        // Scroll animations — Intersection Observer
+        var sections = document.querySelectorAll('.screenshot-section, .features, .howto, .download, .privacy');
+        sections.forEach(function(sec) {
+          sec.classList.add('animate-in');
+        });
+        var observer = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('visible');
+              observer.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.12 });
+        sections.forEach(function(sec) { observer.observe(sec); });
+      })();
+    </script>
+  </body>
 </html>

@@ -737,3 +737,10 @@ textarea {
 .cookie-steps {
   padding-top: 8px;
 }
+
+.hero-logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}

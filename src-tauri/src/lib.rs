@@ -6,7 +6,7 @@ mod utils;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use types::{CancelState, YtDlpPath};
+use types::{CancelState, ImpersonateSupport, YtDlpPath};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -28,8 +28,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(CancelState(Arc::new(AtomicBool::new(false))))
         .manage(YtDlpPath(Mutex::new(yt_path)))
+        .manage(ImpersonateSupport(Arc::new(AtomicBool::new(false))))
         .invoke_handler(tauri::generate_handler![
             commands::check_ytdlp,
+            commands::check_impersonate,
             commands::install_ytdlp,
             commands::fetch_playlist,
             commands::start_download,

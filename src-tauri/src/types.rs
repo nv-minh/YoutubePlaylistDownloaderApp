@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 
 pub struct CancelState(pub Arc<AtomicBool>);
 pub struct YtDlpPath(pub Mutex<String>);
+pub struct ImpersonateSupport(pub Arc<AtomicBool>);
 
 // ── Data Types ─────────────────────────────────────────────────────────
 

@@ -36,6 +36,8 @@ export async function checkYtdlp(): Promise<void> {
       $ytdlpStatus.textContent = "yt-dlp install failed";
     }
   }
+  // Check impersonation support (for TikTok)
+  try { await invoke("check_impersonate"); } catch { /* ignore */ }
 }
 
 // ── Cookie handling ────────────────────────────────────────────────────

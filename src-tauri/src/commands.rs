@@ -29,7 +29,47 @@ pub async fn check_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, Str
 }
 
 #[tauri::command]
+pub async fn check_impersonate(
+    path_state: State<'_, YtDlpPath>,
+    imp_state: State<'_, ImpersonateSupport>,
+) -> Result<bool, String> {
+    let yt_path = path_state.0.lock().await;
+    let output = new_cmd(&*yt_path)
+        .args(["--list-impersonate-targets"])
+        .output()
+        .await
+        .map_err(|e| format!("check failed: {}", e))?;
+    let supported = output.status.success()
+        && String::from_utf8_lossy(&output.stdout).contains("chrome");
+    imp_state.0.store(supported, Ordering::SeqCst);
+    Ok(supported)
+}
+
+#[tauri::command]
 pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, String> {
+    // Try pip install first (includes curl_cffi for TikTok impersonation)
+    let python = if cfg!(target_os = "windows") { "python" } else { "python3" };
+    let pip_ok = new_cmd(python)
+        .args(["-m", "pip", "install", "--upgrade", "yt-dlp", "curl_cffi"])
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if pip_ok {
+        let _yt_name = if cfg!(target_os = "windows") { "yt-dlp.exe" } else { "yt-dlp" };
+        let path = path_state.0.lock().await;
+        let version_output = new_cmd(&*path)
+            .arg("--version")
+            .output()
+            .await
+            .map_err(|e| format!("yt-dlp version check failed: {}", e))?;
+        if version_output.status.success() {
+            return Ok(String::from_utf8_lossy(&version_output.stdout).trim().to_string());
+        }
+    }
+
+    // Fallback: download binary directly
     if cfg!(target_os = "windows") {
         let app_data = std::env::var("APPDATA").unwrap_or_else(|_| {
             format!("C:\\Users\\{}\\AppData\\Roaming",
@@ -57,18 +97,12 @@ pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, S
                 .map(|o| o.status.success())
                 .unwrap_or(false);
             if !ps_ok || !exe_path.exists() {
-                return Err("Failed to download yt-dlp.exe. Please install manually from https://github.com/yt-dlp/yt-dlp".into());
+                return Err("Failed to download yt-dlp. Install manually: pip install yt-dlp curl_cffi".into());
             }
         }
 
         let new_path = exe_path.to_string_lossy().to_string();
         *path_state.0.lock().await = new_path.clone();
-
-        // Try installing curl_cffi for TikTok impersonation support
-        let _ = new_cmd("python")
-            .args(["-m", "pip", "install", "--quiet", "curl_cffi"])
-            .output().await;
-
         let version_output = new_cmd(&new_path)
             .arg("--version")
             .output()
@@ -76,27 +110,11 @@ pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, S
             .map_err(|e| format!("yt-dlp version check failed: {}", e))?;
         Ok(String::from_utf8_lossy(&version_output.stdout).trim().to_string())
     } else {
-        let python = "python3";
-        let output = new_cmd(python)
-            .args(["-m", "pip", "install", "--upgrade", "yt-dlp", "curl_cffi"])
-            .output()
-            .await
-            .map_err(|e| format!("pip failed: {}", e))?;
-        if output.status.success() {
-            let path = path_state.0.lock().await;
-            let version_output = new_cmd(&*path)
-                .arg("--version")
-                .output()
-                .await
-                .map_err(|e| format!("yt-dlp version check failed: {}", e))?;
-            Ok(String::from_utf8_lossy(&version_output.stdout).trim().to_string())
-        } else {
-            // pip failed — try downloading yt-dlp binary directly to ~/.local/bin
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-            let local_bin = PathBuf::from(&home).join(".local/bin");
-            let _ = fs::create_dir_all(&local_bin);
-            let bin_path = local_bin.join("yt-dlp");
-            let url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+        let local_bin = PathBuf::from(&home).join(".local/bin");
+        let _ = fs::create_dir_all(&local_bin);
+        let bin_path = local_bin.join("yt-dlp");
+        let url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
 
             let curl_ok = new_cmd("curl")
                 .args(["-sL", url, "-o"])
@@ -119,7 +137,6 @@ pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, S
             } else {
                 Err("Failed to install yt-dlp. Install manually: pip install yt-dlp or download from https://github.com/yt-dlp/yt-dlp".into())
             }
-        }
     }
 }
 
@@ -131,6 +148,7 @@ pub async fn fetch_playlist(
     cookie_file: String,
     proxy: Option<String>,
     path_state: State<'_, YtDlpPath>,
+    imp_state: State<'_, ImpersonateSupport>,
 ) -> Result<PlaylistResult, String> {
     let playlist_url = if url.contains("tiktok.com") {
         url.clone()
@@ -152,6 +170,9 @@ pub async fn fetch_playlist(
     }
     if is_tiktok {
         cmd.args(["--dump-json"]);
+        if imp_state.0.load(Ordering::SeqCst) {
+            cmd.args(["--impersonate", "chrome"]);
+        }
         cmd.args(["--extractor-args", "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com"]);
     } else {
         cmd.args(["--dump-json", "--flat-playlist"]);
@@ -282,6 +303,7 @@ pub async fn start_download(
     settings: DownloadSettings,
     cancel: State<'_, CancelState>,
     path_state: State<'_, YtDlpPath>,
+    imp_state: State<'_, ImpersonateSupport>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
     cancel.0.store(false, Ordering::SeqCst);
@@ -309,6 +331,7 @@ pub async fn start_download(
                 settings.cookie_file.clone(),
                 settings.proxy.clone(),
                 path_state.clone(),
+                imp_state.clone(),
             )
             .await?;
             playlist_title = format!("@{}", username);
@@ -326,6 +349,9 @@ pub async fn start_download(
                 cmd.args(["--dump-single-json", "--no-playlist"]);
                 if settings.no_watermark {
                     cmd.args(["--extractor-args", "tiktok:video_codec=h264"]);
+                }
+                if imp_state.0.load(Ordering::SeqCst) {
+                    cmd.args(["--impersonate", "chrome"]);
                 }
                 cmd.args(["--extractor-args", "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com"]);
                 cmd.arg(tiktok_url);
@@ -409,6 +435,7 @@ pub async fn start_download(
             settings.cookie_file.clone(),
             settings.proxy.clone(),
             path_state.clone(),
+            imp_state.clone(),
         )
         .await?;
         playlist_title = result.title.clone();
@@ -496,6 +523,7 @@ pub async fn start_download(
         let video_ok_c = video_ok.clone();
         let comment_ok_c = comment_ok.clone();
         let total_comments_c = total_comments.clone();
+        let imp_supported = imp_state.0.clone();
 
         tasks.spawn(async move {
             // Acquire semaphore permit — limits concurrent downloads
@@ -600,6 +628,9 @@ pub async fn start_download(
                     tiktok_args.push_str(";video_codec=h264");
                 }
                 video_cmd.args(["--extractor-args", &tiktok_args]);
+                if imp_supported.load(Ordering::SeqCst) {
+                    video_cmd.args(["--impersonate", "chrome"]);
+                }
             }
             video_cmd
                 .args(["-f", &fmt])

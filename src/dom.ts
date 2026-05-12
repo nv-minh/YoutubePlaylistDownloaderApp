@@ -48,6 +48,7 @@ export let downloadMode: "playlist" | "videos" | "tiktok" = "playlist";
 export let playlistVideos: (VideoInfo | null)[] = [];
 export let failedIndices: number[] = [];
 export let cookieErrorIndices: number[] = [];
+export let impSupported = false;
 
 export function setIsDownloading(v: boolean): void { isDownloading = v; }
 export function setOutputDir(v: string): void { outputDir = v; }
@@ -64,3 +65,4 @@ export function parseVideoUrls(text: string): string[] {
 export function setPlaylistVideos(v: (VideoInfo | null)[]): void { playlistVideos = v; }
 export function setFailedIndices(v: number[]): void { failedIndices = v; }
 export function setCookieErrorIndices(v: number[]): void { cookieErrorIndices = v; }
+export function setImpSupported(v: boolean): void { impSupported = v; }

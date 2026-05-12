@@ -45,6 +45,12 @@ const translations: Record<Lang, Record<TranslationKey, string>> = {
     noWatermark: "Tải không watermark",
     parallelDownloads: "Tải song song",
     fetchInfo: "Lấy thông tin",
+    impWarningTitle: "Tải TikTok có thể thất bại",
+    impWarningText: "Chức năng giả lập trình duyệt không khả dụng. TikTok có thể chặn tải.",
+    installImpersonation: "Cài đặt hỗ trợ Impersonation",
+    impInstalling: "Đang cài đặt...",
+    impSuccess: "Đã cài đặt thành công hỗ trợ impersonation.",
+    impFailed: "Không thể cài đặt. Vui lòng cài Python và pip, rồi thử lại.",
   },
   en: {
     appTitle: "OmniGrab",
@@ -90,6 +96,12 @@ const translations: Record<Lang, Record<TranslationKey, string>> = {
     noWatermark: "Download without watermark",
     parallelDownloads: "Parallel downloads",
     fetchInfo: "Fetch Info",
+    impWarningTitle: "TikTok downloads may fail",
+    impWarningText: "Browser impersonation is not available. TikTok may block downloads.",
+    installImpersonation: "Install Impersonation Support",
+    impInstalling: "Installing...",
+    impSuccess: "Impersonation support installed successfully.",
+    impFailed: "Failed to install. Please install Python and pip, then try again.",
   },
 };
 

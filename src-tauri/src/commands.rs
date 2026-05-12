@@ -11,6 +11,28 @@ use tauri::{Emitter, State};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
 
+// ── curl_cffi install helper ────────────────────────────────────────────
+
+async fn try_install_curl_cffi() -> bool {
+    let candidates: Vec<&str> = if cfg!(target_os = "windows") {
+        vec!["python", "python3", "py"]
+    } else {
+        vec!["python3", "python", "/usr/bin/python3", "/usr/local/bin/python3"]
+    };
+    for py in &candidates {
+        let ok = new_cmd(py)
+            .args(["-m", "pip", "install", "--upgrade", "curl_cffi"])
+            .output()
+            .await
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if ok {
+            return true;
+        }
+    }
+    false
+}
+
 // ── yt-dlp Management ──────────────────────────────────────────────────
 
 #[tauri::command]
@@ -46,7 +68,32 @@ pub async fn check_impersonate(
 }
 
 #[tauri::command]
-pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, String> {
+pub async fn install_curl_cffi(
+    path_state: State<'_, YtDlpPath>,
+    imp_state: State<'_, ImpersonateSupport>,
+) -> Result<bool, String> {
+    let ok = try_install_curl_cffi().await;
+    if ok {
+        let yt_path = path_state.0.lock().await;
+        let output = new_cmd(&*yt_path)
+            .args(["--list-impersonate-targets"])
+            .output()
+            .await
+            .map_err(|e| format!("check failed: {}", e))?;
+        let supported = output.status.success()
+            && String::from_utf8_lossy(&output.stdout).contains("chrome");
+        imp_state.0.store(supported, Ordering::SeqCst);
+        Ok(supported)
+    } else {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+pub async fn install_ytdlp(
+    path_state: State<'_, YtDlpPath>,
+    imp_state: State<'_, ImpersonateSupport>,
+) -> Result<String, String> {
     // Try pip install first (includes curl_cffi for TikTok impersonation)
     let python = if cfg!(target_os = "windows") { "python" } else { "python3" };
     let pip_ok = new_cmd(python)
@@ -65,6 +112,12 @@ pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, S
             .await
             .map_err(|e| format!("yt-dlp version check failed: {}", e))?;
         if version_output.status.success() {
+            // Update impersonation support state
+            if let Ok(imp_output) = new_cmd(&*path).args(["--list-impersonate-targets"]).output().await {
+                let supported = imp_output.status.success()
+                    && String::from_utf8_lossy(&imp_output.stdout).contains("chrome");
+                imp_state.0.store(supported, Ordering::SeqCst);
+            }
             return Ok(String::from_utf8_lossy(&version_output.stdout).trim().to_string());
         }
     }
@@ -103,11 +156,19 @@ pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, S
 
         let new_path = exe_path.to_string_lossy().to_string();
         *path_state.0.lock().await = new_path.clone();
+        // Best-effort curl_cffi install for TikTok impersonation
+        let _ = try_install_curl_cffi().await;
         let version_output = new_cmd(&new_path)
             .arg("--version")
             .output()
             .await
             .map_err(|e| format!("yt-dlp version check failed: {}", e))?;
+        // Update impersonation support state
+        if let Ok(imp_output) = new_cmd(&new_path).args(["--list-impersonate-targets"]).output().await {
+            let supported = imp_output.status.success()
+                && String::from_utf8_lossy(&imp_output.stdout).contains("chrome");
+            imp_state.0.store(supported, Ordering::SeqCst);
+        }
         Ok(String::from_utf8_lossy(&version_output.stdout).trim().to_string())
     } else {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
@@ -128,11 +189,19 @@ pub async fn install_ytdlp(path_state: State<'_, YtDlpPath>) -> Result<String, S
                 let _ = std::process::Command::new("chmod").arg("+x").arg(&bin_path).output();
                 let new_path = bin_path.to_string_lossy().to_string();
                 *path_state.0.lock().await = new_path.clone();
+                // Best-effort curl_cffi install for TikTok impersonation
+                let _ = try_install_curl_cffi().await;
                 let version_output = new_cmd(&new_path)
                     .arg("--version")
                     .output()
                     .await
                     .map_err(|e| format!("yt-dlp version check failed: {}", e))?;
+                // Update impersonation support state
+                if let Ok(imp_output) = new_cmd(&new_path).args(["--list-impersonate-targets"]).output().await {
+                    let supported = imp_output.status.success()
+                        && String::from_utf8_lossy(&imp_output.stdout).contains("chrome");
+                    imp_state.0.store(supported, Ordering::SeqCst);
+                }
                 Ok(String::from_utf8_lossy(&version_output.stdout).trim().to_string())
             } else {
                 Err("Failed to install yt-dlp. Install manually: pip install yt-dlp or download from https://github.com/yt-dlp/yt-dlp".into())

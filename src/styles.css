@@ -302,6 +302,47 @@ textarea {
   color: var(--text-primary);
 }
 
+/* ── Impersonation Warning ─────────────────── */
+.imp-warning {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 152, 0, 0.1);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+.imp-warning-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--status-skipped);
+  margin-bottom: 4px;
+}
+.imp-warning-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.btn-install-imp {
+  width: 100%;
+  padding: 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--status-skipped);
+  background: transparent;
+  color: var(--status-skipped);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-install-imp:hover {
+  background: var(--status-skipped);
+  color: #fff;
+}
+.btn-install-imp:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-row {
   display: flex;
   gap: 6px;

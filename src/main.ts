@@ -6,8 +6,9 @@ import {
   $subCustom, $subOptions, $start, $stop, $folder, $log,
   $progressFill, $stats, $queue, $lang,
   $noWatermark, $maxConcurrent, $maxConcurrentVal, $themeToggle,
-  outputDir, actualDir, playlistVideos, failedIndices,
+  outputDir, actualDir, playlistVideos, failedIndices, impSupported, downloadMode,
   setOutputDir, setActualDir, setPlaylistVideos, setFailedIndices, setAccessType, setDownloadMode,
+  setImpSupported,
   parseVideoUrls,
 } from "./dom";
 import { checkYtdlp, startDownload, redownloadFailed, setupEventListeners } from "./download";
@@ -112,6 +113,11 @@ document.querySelectorAll<HTMLElement>(".tab").forEach((tab) => {
       $start.disabled = false;
       setPlaylistVideos([]);
       setFailedIndices([]);
+      // Show impersonation warning for TikTok mode
+      const $impWarning = document.getElementById("imp-warning");
+      if ($impWarning) {
+        $impWarning.style.display = (isTiktok && !impSupported) ? "block" : "none";
+      }
       $queue.innerHTML = `<div class="queue-empty" data-i18n="queueEmpty">${t("queueEmpty")}</div>`;
     }
   });
@@ -162,6 +168,30 @@ $folder.addEventListener("click", () => {
 });
 
 document.getElementById("btn-redownload")!.addEventListener("click", redownloadFailed);
+
+// ── Install impersonation support ──────────────────────────────────────
+document.getElementById("btn-install-imp")!.addEventListener("click", async () => {
+  const $btn = document.getElementById("btn-install-imp") as HTMLButtonElement;
+  const $impWarning = document.getElementById("imp-warning")!;
+  $btn.disabled = true;
+  $btn.textContent = t("impInstalling");
+  try {
+    const success = await invoke<boolean>("install_curl_cffi");
+    if (success) {
+      setImpSupported(true);
+      $impWarning.style.display = "none";
+      appendLog(t("impSuccess"));
+    } else {
+      $btn.disabled = false;
+      $btn.textContent = t("installImpersonation");
+      appendLog(t("impFailed"));
+    }
+  } catch (e) {
+    $btn.disabled = false;
+    $btn.textContent = t("installImpersonation");
+    appendLog(`Install error: ${e}`);
+  }
+});
 
 // ── Init ───────────────────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {

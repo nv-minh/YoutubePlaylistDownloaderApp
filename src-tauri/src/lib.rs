@@ -33,6 +33,7 @@ pub fn run() {
             commands::check_ytdlp,
             commands::check_impersonate,
             commands::install_ytdlp,
+            commands::install_curl_cffi,
             commands::fetch_playlist,
             commands::start_download,
             commands::cancel_download,

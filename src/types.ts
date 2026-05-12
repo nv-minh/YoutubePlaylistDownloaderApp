@@ -51,4 +51,5 @@ export type TranslationKey =
   | "cookieHintTitle" | "cookieHintStep1" | "cookieHintStep2" | "cookieHintStep3" | "cookieHintStep4"
   | "tabPlaylist" | "tabVideos" | "videosUrl" | "videosUrlPlaceholder"
   | "tabTiktok" | "tiktokUrl" | "tiktokUrlPlaceholder" | "noWatermark"
-  | "parallelDownloads" | "fetchInfo";
+  | "parallelDownloads" | "fetchInfo"
+  | "impWarningTitle" | "impWarningText" | "installImpersonation" | "impInstalling" | "impSuccess" | "impFailed";

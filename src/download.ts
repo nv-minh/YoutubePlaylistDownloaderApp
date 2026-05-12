@@ -10,8 +10,9 @@ import {
   $log, $progressFill, $stats, $queue,
   $noWatermark, $maxConcurrent,
   isDownloading, outputDir, actualDir, accessType, downloadMode,
-  playlistVideos, failedIndices, cookieErrorIndices,
+  playlistVideos, failedIndices, cookieErrorIndices, impSupported,
   setIsDownloading, setOutputDir, setActualDir, setFailedIndices, setCookieErrorIndices,
+  setImpSupported,
   parseVideoUrls,
 } from "./dom";
 import { t } from "./i18n";
@@ -37,7 +38,14 @@ export async function checkYtdlp(): Promise<void> {
     }
   }
   // Check impersonation support (for TikTok)
-  try { await invoke("check_impersonate"); } catch { /* ignore */ }
+  try {
+    const impOk = await invoke<boolean>("check_impersonate");
+    setImpSupported(impOk);
+    const $impWarning = document.getElementById("imp-warning");
+    if ($impWarning && downloadMode === "tiktok") {
+      $impWarning.style.display = impOk ? "none" : "block";
+    }
+  } catch { /* ignore */ }
 }
 
 // ── Cookie handling ────────────────────────────────────────────────────
@@ -165,6 +173,14 @@ export async function startDownload(): Promise<void> {
 
   // TikTok mode
   if (downloadMode === "tiktok") {
+    if (!impSupported) {
+      const proceed = confirm(t("impWarningText"));
+      if (!proceed) {
+        $start.disabled = false;
+        return;
+      }
+    }
+
     const tiktokUrls = parseVideoUrls($urlTiktok.value);
     if (tiktokUrls.length === 0) {
       $start.disabled = false;

@@ -93,6 +93,8 @@ pub fn setup_env(cmd: &mut Command) {
 pub fn new_cmd(program: &str) -> Command {
     let mut cmd = Command::new(program);
     setup_env(&mut cmd);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW — hide console
     cmd
 }
 
@@ -196,11 +198,11 @@ pub fn inject_metadata(
     let thumb_path = video_dir.join("thumb.jpg");
     let ext = format;
 
-    let curl_output = std::process::Command::new("curl")
-        .args(["-sL", thumbnail_url, "-o"])
-        .arg(&thumb_path)
-        .output()
-        .map_err(|e| format!("curl failed: {}", e))?;
+    let mut curl_cmd = std::process::Command::new("curl");
+    curl_cmd.args(["-sL", thumbnail_url, "-o"]).arg(&thumb_path);
+    #[cfg(target_os = "windows")]
+    curl_cmd.creation_flags(0x08000000);
+    let curl_output = curl_cmd.output().map_err(|e| format!("curl failed: {}", e))?;
 
     if !curl_output.status.success() || !thumb_path.exists() {
         return Err("Failed to download thumbnail".into());
@@ -216,6 +218,8 @@ pub fn inject_metadata(
     let is_audio = matches!(ext, "mp3" | "flac" | "wav" | "ogg" | "m4a");
 
     let mut ffmpeg_cmd = std::process::Command::new("ffmpeg");
+    #[cfg(target_os = "windows")]
+    ffmpeg_cmd.creation_flags(0x08000000);
     ffmpeg_cmd.arg("-y");
     ffmpeg_cmd.arg("-i").arg(&video_path);
     ffmpeg_cmd.arg("-i").arg(&thumb_path);

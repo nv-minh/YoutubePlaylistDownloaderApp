@@ -891,12 +891,15 @@ pub async fn start_download(
                         }
                     }
                     _ => {
-                        // Retry on 503 / network error
+                        // Retry on 503 / network error / TikTok no formats
                         let is_503 = stderr_buf.contains("HTTP Error 503");
                         let is_network_error = stderr_buf.contains("Giving up after") || stderr_buf.contains("bytes read");
-                        let should_retry = (is_503 || is_network_error) && !is_audio;
+                        let is_no_formats = stderr_buf.contains("No video formats found");
+                        let should_retry = (is_503 || is_network_error || (settings.is_tiktok && is_no_formats)) && !is_audio;
                         if should_retry {
-                            let reason = if is_503 { "Server busy (503)" } else { "Network error" };
+                            let reason = if is_503 { "Server busy (503)" }
+                                else if settings.is_tiktok && is_no_formats { "No video formats found, retrying without custom API hostname..." }
+                                else { "Network error" };
                             app.emit("download-log", format!("  -> {}, retrying with single-stream format...", reason)).ok();
                             if !settings.flat_output {
                                 let _ = fs::remove_dir_all(&video_dir);
@@ -916,6 +919,15 @@ pub async fn start_download(
                             retry_cmd.args(yt_dlp_extra());
                             if !settings.cookie_file.is_empty() {
                                 retry_cmd.args(["--cookies", &settings.cookie_file]);
+                            }
+                            if settings.is_tiktok {
+                                if settings.no_watermark {
+                                    retry_cmd.args(["--extractor-args", "tiktok:video_codec=h264"]);
+                                }
+                                if imp_supported.load(Ordering::SeqCst) {
+                                    retry_cmd.args(["--impersonate", "chrome"]);
+                                }
+                                retry_cmd.args(["--extractor-retries", "5"]);
                             }
                             retry_cmd
                                 .args(["-f", "best"])
